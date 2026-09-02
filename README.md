@@ -74,3 +74,22 @@ lý màu mới.
 
 **Khẩu hình chưa bám lời hát.** Miệng xoay vòng nguyên âm theo đồng hồ chứ
 không theo âm vị, dù trình xem đã có phân tích FFT thật.
+
+## Thử nghiệm hình dạng tóc
+
+Thuật toán cắt tóc nằm riêng ở [`scripts/hairstyles.py`](scripts/hairstyles.py).
+Để thử một tham số mà không phải bake lại 14 trạng thái (chín phút), dùng:
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --background \
+    --factory-startup --python tools/preview_hairstyles.py -- /tmp/xem_toc V1
+```
+
+Một lượt mất khoảng một phút và render 12 ảnh: bốn kiểu tóc, ba góc nhìn.
+Nó dùng chung `scripts/hairstyles.py` với quy trình dựng thật nên hình ra là
+hình thật, không phải bản mô phỏng riêng.
+
+Ba tham số của mỗi kiểu: `z_back` / `z_side` là cao độ kết thúc của vạt sau và
+vạt bên, `u_curve_depth` là độ cong chữ U của đường cắt sau lưng, và `hang`
+điều khiển mức xoè còn giữ lại — tóc càng ngắn thì càng phải rơi thẳng, vì nó
+không với tới vai nên không có gì đẩy nó ra ngoài.
