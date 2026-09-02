@@ -4,7 +4,7 @@ import bpy
 import math
 import mathutils
 
-from rig import apply_soft_hair_drape, create_quaternion, get_biomechanical_gait_frame
+from rig import create_quaternion, get_biomechanical_gait_frame
 
 CLIP = '04_BuocDi_CoBan'
 
@@ -57,5 +57,4 @@ def bake(char_arm, pb):
         if pb.get('J_Bip_R_LowerArm'):
             pb['J_Bip_R_LowerArm'].rotation_quaternion = create_quaternion((0.15 + 0.12 * max(0.0, g['r_arm']), 0.0, 0.18)); pb['J_Bip_R_LowerArm'].keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
-        apply_soft_hair_drape(pb, frame, phi * 2.0, sway_amp=0.030, bounce_amp=0.035)
     return act_walk_basic

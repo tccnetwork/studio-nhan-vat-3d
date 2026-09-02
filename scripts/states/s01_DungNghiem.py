@@ -4,7 +4,7 @@ import bpy
 import math
 import mathutils
 
-from rig import apply_soft_hair_drape, create_quaternion
+from rig import create_quaternion
 
 CLIP = '01_DungNghiem'
 
@@ -49,5 +49,4 @@ def bake(char_arm, pb):
                     b_name = f'J_Bip_{side}_{f_name}{seg}'
                     if pb.get(b_name): pb[b_name].rotation_quaternion = create_quaternion((0, 0, 0)); pb[b_name].keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
-        apply_soft_hair_drape(pb, frame, t, sway_amp=0.010, bounce_amp=0.015)
     return act_nghiem

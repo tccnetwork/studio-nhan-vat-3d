@@ -7,8 +7,9 @@ trình xem chạy thẳng trên trình duyệt.
 ```
 source/     Model nguồn — CHỈ ĐỌC. Không script nào được ghi vào đây.
 build/      Kết quả dựng (glb / fbx / blend / manifest.json). Dựng lại là có.
-web/        Trình xem 3D — three.js r180 dạng ES module, tự sinh giao diện
-            từ manifest, giải nén Draco khi tải model.
+web/        Trình xem 3D — three.js r180 dạng ES module, tự sinh giao diện từ
+            manifest, giải nén Draco (bộ giải nén để sẵn ở web/vendor/),
+            và mô phỏng vật lý tóc lúc chạy.
 scripts/    catalog.py là danh mục gốc; build_character.py điều phối;
             states/ mỗi trạng thái một file; rig.py và hairstyles.py dùng chung.
 tools/      Tiện ích thao tác GLB, không cần Blender.
@@ -108,6 +109,23 @@ Ba nút vặn ở cuối `scripts/hairstyles.py`: `hang` (xoè hay rơi thẳng)
 
 **Khẩu hình chưa bám lời hát.** Miệng xoay vòng nguyên âm theo đồng hồ chứ
 không theo âm vị, dù trình xem đã có phân tích FFT thật.
+
+## Vật lý tóc
+
+Tóc **không** được bake vào clip. `web/app.js` mô phỏng spring bone theo quy ước
+VRM: mỗi đốt tóc giữ vị trí chóp ở frame trước, mỗi bước lấy quán tính cộng lực
+kéo về tư thế nghỉ cộng trọng lực, rồi ép chóp về đúng bán kính của đốt, cuối
+cùng va chạm với các quả cầu bọc thân người.
+
+Trước đây chuyển động tóc bake cứng vào từng clip: **0,864 MB trong 1,33 MB**
+dữ liệu hoạt ảnh chỉ để lưu xương tóc, và mỗi module trạng thái phải lặp lại
+cùng một đoạn rủ tóc. Nay tóc phản ứng với chuyển động thật nên nó cũng đúng cả
+trong lúc chuyển tiếp giữa hai trạng thái — điều bản bake cứng không làm được.
+
+Bốn hằng số ở đầu `web/app.js`: `HAIR_DRAG` (hãm quán tính), `HAIR_STIFFNESS`
+(lực kéo về tư thế nghỉ), `HAIR_GRAVITY` (độ trĩu), `HAIR_RADIUS` (bán kính lọn
+tóc khi va chạm). Mô phỏng chạy ở bước cố định 1/60 giây nên kết quả không đổi
+theo tốc độ khung hình.
 
 ## Ghi chú về trình xem
 

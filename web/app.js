@@ -8,8 +8,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
-const DRACO_DECODER_PATH =
-    'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/draco/gltf/';
+// Bộ giải nén Draco để ngay trong dự án thay vì lấy từ CDN: trang tải được
+// khi không có mạng, và thời gian tải không còn phụ thuộc độ trễ của CDN.
+const DRACO_DECODER_PATH = 'vendor/draco/';
 
 //
 // Danh sách trạng thái, kiểu tóc và nhóm vật liệu không nằm trong file này.
@@ -408,9 +409,17 @@ function loadModel(path) {
             }
         }
 
-        cacheMorphIndices(characterModel);
-        initHairPhysicsColliders(characterModel);
+        // Đưa nhân vật vào cảnh TRƯỚC khi dựng vật lý tóc: nếu bước tóc ném lỗi
+        // thì cũng chỉ mất phần tóc động, chứ không mất luôn cả nhân vật.
         scene.add(characterModel);
+        cacheMorphIndices(characterModel);
+        try {
+            initHairPhysicsColliders(characterModel);
+            buildHairSprings();
+        } catch (err) {
+            console.error('Vật lý tóc không khởi tạo được:', err);
+            hairSprings = [];
+        }
     }, undefined, (err) => {
         console.error("Error loading anime idol model:", err);
     });
@@ -777,42 +786,121 @@ function initHairPhysicsColliders(model) {
     }
 }
 
-function resolveHairPhysicsCollisions() {
-    if (!characterModel || hairBonesList.length === 0 || bodyColliders.length === 0) return;
+// ==========================================
+// VẬT LÝ TÓC — mô phỏng lúc chạy
+//
+// Trước đây chuyển động tóc được bake cứng vào từng clip: 0,864 MB trong 1,33 MB
+// dữ liệu hoạt ảnh chỉ để lưu xương tóc, và mỗi module trạng thái phải lặp lại
+// cùng một đoạn rủ tóc. Nay tóc phản ứng với chuyển động thật của nhân vật, nên
+// nó cũng đúng cả trong lúc chuyển tiếp giữa hai trạng thái — điều mà bản bake
+// cứng không làm được.
+//
+// Thuật toán là spring bone theo quy ước VRM, hợp với model VRoid này: mỗi đốt
+// tóc giữ vị trí chóp ở frame trước, mỗi bước lấy quán tính cộng lực kéo về tư
+// thế nghỉ cộng trọng lực, rồi ép chóp về đúng bán kính của đốt.
+// ==========================================
+const HAIR_STEP = 1 / 60;          // bước cố định, cho kết quả không đổi theo fps
+const HAIR_DRAG = 0.38;            // hãm quán tính
+const HAIR_STIFFNESS = 0.055;      // lực kéo về tư thế nghỉ
+const HAIR_GRAVITY = 0.020;        // độ trĩu xuống
+const HAIR_RADIUS = 0.018;         // bán kính lọn tóc khi va chạm
 
-    const collidersWorld = bodyColliders.map(c => {
-        const center = c.offset.clone().applyMatrix4(c.bone.matrixWorld);
-        return { center, radius: c.radius };
-    });
+let hairSprings = [];
+let hairAccumulator = 0;
 
-    const hairWorldPos = new THREE.Vector3();
-    const pushVec = new THREE.Vector3();
+function buildHairSprings() {
+    hairSprings = [];
+    for (const bone of hairBonesList) {
+        const child = bone.children.find(c => c.isBone);
+        if (!bone.parent || !child) continue;
+        const len = child.position.length();
+        if (len < 1e-5) continue;
+        let depth = 0;
+        for (let p = bone.parent; p && p.isBone; p = p.parent) depth++;
+        hairSprings.push({
+            bone,
+            child,
+            depth,
+            len,
+            restLocalQuat: bone.quaternion.clone(),
+            childLocalPos: child.position.clone().normalize(),
+            prevTip: child.getWorldPosition(new THREE.Vector3()),
+            curTip: child.getWorldPosition(new THREE.Vector3()),
+        });
+    }
+    // Cha trước con: đốt gốc phải chốt xong thì đốt sau mới tính đúng vị trí.
+    hairSprings.sort((a, b) => a.depth - b.depth);
+    console.log(`Vật lý tóc: ${hairSprings.length} đốt trên ${hairBonesList.length} xương tóc`);
+}
 
-    for (let i = 0; i < hairBonesList.length; i++) {
-        const bone = hairBonesList[i];
-        if (!bone.parent) continue;
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _q1 = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
 
-        bone.getWorldPosition(hairWorldPos);
-        let collided = false;
+function stepHairPhysics() {
+    const colliders = bodyColliders.map(c => ({
+        center: c.offset.clone().applyMatrix4(c.bone.matrixWorld),
+        radius: c.radius,
+    }));
 
-        for (let j = 0; j < collidersWorld.length; j++) {
-            const col = collidersWorld[j];
-            const distSq = hairWorldPos.distanceToSquared(col.center);
-            const r = col.radius;
-            if (distSq < r * r && distSq > 0.00001) {
-                const dist = Math.sqrt(distSq);
-                const penetration = r - dist;
-                pushVec.subVectors(hairWorldPos, col.center).normalize();
-                hairWorldPos.addScaledVector(pushVec, penetration + 0.003); // 3mm soft surface contact
-                collided = true;
+    for (const sp of hairSprings) {
+        const bone = sp.bone;
+        const head = bone.getWorldPosition(_v1).clone();
+        bone.parent.getWorldQuaternion(_q1);
+
+        // Hướng mà đốt tóc sẽ chỉ nếu không có lực nào tác động
+        const restDir = sp.childLocalPos.clone()
+            .applyQuaternion(sp.restLocalQuat)
+            .applyQuaternion(_q1)
+            .normalize();
+
+        const next = sp.curTip.clone()
+            .add(_v2.subVectors(sp.curTip, sp.prevTip).multiplyScalar(1 - HAIR_DRAG))
+            .addScaledVector(restDir, HAIR_STIFFNESS * sp.len)
+            .add(_v3.set(0, -HAIR_GRAVITY * sp.len, 0));
+
+        // Đốt tóc không co giãn: chóp luôn nằm trên mặt cầu bán kính len
+        next.sub(head).setLength(sp.len).add(head);
+
+        for (const col of colliders) {
+            const d = next.distanceTo(col.center);
+            const r = col.radius + HAIR_RADIUS;
+            if (d < r && d > 1e-5) {
+                next.sub(col.center).setLength(r).add(col.center);
+                next.sub(head).setLength(sp.len).add(head);
             }
         }
 
-        if (collided) {
-            const localPos = bone.parent.worldToLocal(hairWorldPos);
-            bone.position.copy(localPos);
+        // Xoay đốt tóc để nó chỉ về chóp mới, tính trong không gian thế giới
+        const curDir = sp.child.getWorldPosition(_v2).sub(head);
+        if (curDir.lengthSq() > 1e-10) {
+            _q2.setFromUnitVectors(curDir.normalize(),
+                                   _v3.subVectors(next, head).normalize());
+            bone.parent.getWorldQuaternion(_q1);
+            bone.quaternion
+                .premultiply(_q1)
+                .premultiply(_q2)
+                .premultiply(_q1.clone().invert());
+            bone.updateMatrixWorld(true);
         }
+
+        sp.prevTip.copy(sp.curTip);
+        sp.curTip.copy(next);
     }
+}
+
+function updateHairPhysics(delta) {
+    if (hairSprings.length === 0) return;
+    hairAccumulator += Math.min(delta, 0.1);
+    let steps = 0;
+    while (hairAccumulator >= HAIR_STEP && steps < 3) {
+        stepHairPhysics();
+        hairAccumulator -= HAIR_STEP;
+        steps++;
+    }
+    if (steps === 3) hairAccumulator = 0;   // tụt fps thì bỏ bớt chứ không dồn nợ
 }
 
 function updateAnimationHUD(clipName) {
@@ -959,7 +1047,7 @@ function animate() {
 
     if (mixer) {
         mixer.update(delta);
-        resolveHairPhysicsCollisions();
+        updateHairPhysics(delta);
     }
 
     if (skeletonHelper && skeletonHelper.visible) {

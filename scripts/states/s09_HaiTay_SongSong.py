@@ -4,7 +4,7 @@ import bpy
 import math
 import mathutils
 
-from rig import apply_dual_arm_hair_drape, create_quaternion
+from rig import create_quaternion
 
 CLIP = '09_HaiTay_SongSong'
 
@@ -101,5 +101,4 @@ def bake(char_arm, pb):
                     pb[t_bone].rotation_quaternion = create_quaternion((0.10, -0.08 * sign, -0.10 * sign))
                     pb[t_bone].keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
-        apply_dual_arm_hair_drape(pb, frame, t, sway_amp=0.018, bounce_amp=0.022)
     return act_dual_arms

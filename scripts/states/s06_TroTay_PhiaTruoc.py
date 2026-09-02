@@ -4,7 +4,7 @@ import bpy
 import math
 import mathutils
 
-from rig import apply_pointing_hair_drape, create_quaternion
+from rig import create_quaternion
 
 CLIP = '06_TroTay_PhiaTruoc'
 
@@ -117,5 +117,4 @@ def bake(char_arm, pb):
                 pb[f'J_Bip_L_Thumb{seg}'].rotation_quaternion = create_quaternion((0.0, 0.0, -0.45))
                 pb[f'J_Bip_L_Thumb{seg}'].keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
-        apply_pointing_hair_drape(pb, frame, t, sway_amp=0.018, bounce_amp=0.022)
     return act_point

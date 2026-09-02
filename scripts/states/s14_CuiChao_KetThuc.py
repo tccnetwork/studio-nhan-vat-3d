@@ -4,7 +4,7 @@ import bpy
 import math
 import mathutils
 
-from rig import apply_bow_hair_drape, create_quaternion
+from rig import create_quaternion
 
 CLIP = '14_CuiChao_KetThuc'
 
@@ -107,6 +107,5 @@ def bake(char_arm, pb):
                         pb[f_bone].keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
         # 6. Hair forward physics drape
-        apply_bow_hair_drape(pb, frame, bow_factor)
 
     return act_bow

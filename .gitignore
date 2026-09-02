@@ -14,6 +14,9 @@ audio/
 mocap/
 external_library_animations/
 
+# Bộ giải nén Draco vendored — cần theo dõi để trang chạy được offline
+!web/vendor/**
+
 # --- Rác hệ thống ---
 .DS_Store
 __pycache__/

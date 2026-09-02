@@ -4,7 +4,7 @@ import bpy
 import math
 import mathutils
 
-from rig import apply_soft_hair_drape, create_quaternion, get_biomechanical_gait_frame
+from rig import create_quaternion, get_biomechanical_gait_frame
 
 CLIP = '05_BuocDi_TuNhien'
 
@@ -97,5 +97,4 @@ def bake(char_arm, pb):
                         pb[b_name].rotation_quaternion = create_quaternion((0.0, -0.18, -0.10 if side=='L' else 0.10))
                         pb[b_name].keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
-        apply_soft_hair_drape(pb, frame, phi * 2.0, sway_amp=0.028, bounce_amp=0.032)
     return act_walk_mocap

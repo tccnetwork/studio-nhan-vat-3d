@@ -4,7 +4,7 @@ import bpy
 import math
 import mathutils
 
-from rig import apply_soft_hair_drape, create_quaternion
+from rig import create_quaternion
 
 CLIP = '03_TPose'
 
@@ -25,5 +25,4 @@ def bake(char_arm, pb):
                        'J_Bip_R_UpperLeg', 'J_Bip_R_LowerLeg', 'J_Bip_R_Foot']:
             if pb.get(b_name): pb[b_name].rotation_quaternion = create_quaternion((0, 0, 0)); pb[b_name].keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
-        apply_soft_hair_drape(pb, frame, 0.0, sway_amp=0.0, bounce_amp=0.0)
     return act_tpose

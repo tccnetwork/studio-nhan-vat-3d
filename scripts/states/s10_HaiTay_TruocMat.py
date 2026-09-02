@@ -4,7 +4,7 @@ import bpy
 import math
 import mathutils
 
-from rig import apply_soft_hair_drape, create_quaternion
+from rig import create_quaternion
 
 CLIP = '10_HaiTay_TruocMat'
 
@@ -101,5 +101,4 @@ def bake(char_arm, pb):
                     pb[t_bone].rotation_quaternion = create_quaternion((0.15, -0.10 * sign, -0.15 * sign))
                     pb[t_bone].keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
-        apply_soft_hair_drape(pb, frame, t, sway_amp=0.018, bounce_amp=0.022)
     return act_hands_face
