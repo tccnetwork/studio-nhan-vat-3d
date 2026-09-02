@@ -129,6 +129,10 @@ body {
     padding: 14px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     pointer-events: auto;
+    /* Cột HUD là flex dọc, nên mặc định các thẻ tự co lại cho vừa chiều cao
+       màn hình và thẻ trạng thái bị cắt mất một nửa số nút. Giữ chiều cao tự
+       nhiên rồi để cả cột cuộn — số nút sẽ còn tăng khi thêm trạng thái. */
+    flex-shrink: 0;
 }
 
 .highlight-card {

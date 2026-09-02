@@ -60,22 +60,10 @@
         <div class="card" style="border: 2px solid #c084fc; background: rgba(30, 27, 75, 0.85); box-shadow: 0 0 15px rgba(192, 132, 252, 0.25);">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
                 <h3 style="color: #e9d5ff; margin: 0;">💇‍♀️ Bộ Sưu Tập Kiểu Tóc</h3>
-                <span style="font-size: 10px; background: #a855f7; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: 700;">4 KIỂU TÓC</span>
+                <span id="hair-count-badge" style="font-size: 10px; background: #a855f7; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: 700;">…</span>
             </div>
             <p class="sub-hint" style="color: #cbd5e1; margin-bottom: 8px;">Nhấp vào nút để đổi kiểu tóc nhân vật tức thì:</p>
-            <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
-                <button id="btn-hair-long" class="btn hair-btn active" style="justify-content: flex-start; padding: 10px 12px; border: 1.5px solid #c084fc; font-weight: 700; background: rgba(192, 132, 252, 0.2); font-size: 13px;" onclick="switchHairstyle('long')">
-                    ✨ 1. Tóc Dài Suôn Mượt (Long Silky Idol)
-                </button>
-                <button id="btn-hair-curled" class="btn hair-btn" style="justify-content: flex-start; padding: 10px 12px; border: 1.5px solid #f59e0b; font-weight: 700; color: #fde68a; background: rgba(245, 158, 11, 0.1); font-size: 13px;" onclick="switchHairstyle('curled')">
-                    🌸 2. Tóc Dài Vừa Thẳng Mượt (Medium-Long Silky)
-                </button>
-                <button id="btn-hair-medium" class="btn hair-btn" style="justify-content: flex-start; padding: 10px 12px; border: 1.5px solid #ec4899; font-weight: 700; color: #fbcfe8; background: rgba(236, 72, 153, 0.1); font-size: 13px;" onclick="switchHairstyle('medium')">
-                    🌸 3. Tóc Ngang Vai Thẳng Mượt (Shoulder Silky)
-                </button>
-                <button id="btn-hair-bob" class="btn hair-btn" style="justify-content: flex-start; padding: 10px 12px; border: 1.5px solid #38bdf8; font-weight: 700; color: #bae6fd; background: rgba(56, 189, 248, 0.1); font-size: 13px;" onclick="switchHairstyle('bob')">
-                    🎀 4. Tóc Bob Ngắn Thẳng Mượt (Short Bob Silky)
-                </button>
+            <div id="hair-btn-grid" style="display: grid; grid-template-columns: 1fr; gap: 8px;"></div>
             </div>
         </div>
 
@@ -185,26 +173,11 @@
     </div>
 
     <div class="hud-panel right-panel">
-        <!-- 13 ANIMATION STATES CARD -->
+        <!-- Thẻ trạng thái: nút do web/app.js sinh từ build/manifest.json -->
         <div class="card highlight-card" style="border: 2px solid #38bdf8; background: rgba(15, 23, 42, 0.9); max-height: 480px; overflow-y: auto;">
-            <h3 style="color: #38bdf8;">🎬 13 Trạng Thái Hoạt Ảnh Ca Sĩ Idol</h3>
+            <h3 id="state-card-title" style="color: #38bdf8;">🎬 Trạng Thái Hoạt Ảnh</h3>
             <p class="sub-hint">Bấm chọn để chuyển đổi tư thế nhân vật ngay lập tức:</p>
-            <div class="state-btn-grid" style="grid-template-columns: 1fr 1fr; gap: 6px;">
-                <button id="btn-state-1" class="btn state-btn active" onclick="switchAnimationState('01_DungNghiem')">1. 🧍 Đứng Nghiêm</button>
-                <button id="btn-state-2" class="btn state-btn" onclick="switchAnimationState('02_DungNghi')">2. 💃 Nghỉ (Trái)</button>
-                <button id="btn-state-7" class="btn state-btn" style="border-color: #c084fc; color: #e9d5ff; font-weight: 600;" onclick="switchAnimationState('07_DungNghi_DoiXung')">3. 💃 Nghỉ (Phải)</button>
-                <button id="btn-state-3" class="btn state-btn" onclick="switchAnimationState('03_TPose')">4. 🤸 T-Pose</button>
-                <button id="btn-state-4" class="btn state-btn" onclick="switchAnimationState('04_BuocDi_CoBan')">5. 🏃 Đi Cơ Bản</button>
-                <button id="btn-state-5" class="btn state-btn" style="border-color: #4ade80; color: #4ade80;" onclick="switchAnimationState('05_BuocDi_TuNhien')">6. 🚶 Đi Tự Nhiên</button>
-                <button id="btn-state-6" class="btn state-btn" style="border-color: #f43f5e; color: #f43f5e; font-weight: 700;" onclick="switchAnimationState('06_TroTay_PhiaTruoc')">7. 👉 Chỉ Tay Phải</button>
-                <button id="btn-state-8" class="btn state-btn" style="border-color: #fb7185; color: #ffe4e6; font-weight: 700;" onclick="switchAnimationState('08_TroTay_Trai')">8. 👈 Chỉ Tay Trái</button>
-                <button id="btn-state-9" class="btn state-btn" style="border-color: #38bdf8; color: #38bdf8; font-weight: 700; background: rgba(56, 189, 248, 0.1);" onclick="switchAnimationState('09_HaiTay_SongSong')">9. 🙌 2 Tay Song Song</button>
-                <button id="btn-state-10" class="btn state-btn" style="border-color: #f472b6; color: #fbcfe8; font-weight: 700; background: rgba(244, 114, 182, 0.1);" onclick="switchAnimationState('10_HaiTay_TruocMat')">10. 🌸 2 Tay Trước Mặt</button>
-                <button id="btn-state-11" class="btn state-btn" style="border-color: #ec4899; color: #f472b6; font-weight: 700; background: rgba(236, 72, 153, 0.12);" onclick="switchAnimationState('11_TraiTim_YeuThuong')">11. 💖 Bắn Tim 2 Tay ✨</button>
-                <button id="btn-state-12" class="btn state-btn" style="border-color: #eab308; color: #fef08a; font-weight: 700; background: rgba(234, 179, 8, 0.12);" onclick="switchAnimationState('12_VayTay_ChaoHoi')">12. 👋 Vẫy Tay Chào ✨</button>
-                <button id="btn-state-13" class="btn state-btn" style="border-color: #f59e0b; color: #fef3c7; font-weight: 700; background: rgba(245, 158, 11, 0.15);" onclick="switchAnimationState('13_Cuoi_DuyenDang')">13. 😄 Cười Duyên & Giggle ✨</button>
-                <button id="btn-state-14" class="btn state-btn" style="border-color: #10b981; color: #a7f3d0; font-weight: 700; background: rgba(16, 185, 129, 0.12);" onclick="switchAnimationState('14_CuiChao_KetThuc')">14. 🙇‍♀️ Cúi Chào Cảm Ơn ✨</button>
-            </div>
+            <div id="state-btn-grid" class="state-btn-grid" style="grid-template-columns: 1fr 1fr; gap: 6px;"></div>
         </div>
 
         <div class="card">

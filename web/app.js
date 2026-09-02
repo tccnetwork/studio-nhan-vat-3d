@@ -1,10 +1,14 @@
 // Studio 3D cho nhân vật nữ ca sĩ anime idol.
 //
-// Đường dẫn tài nguyên gom về một chỗ: Giai đoạn 1 sẽ thay khối này bằng
-// build/manifest.json do quy trình dựng sinh ra, để viewer tự biết có bao
-// nhiêu trạng thái thay vì phải viết cứng từng nút bấm.
-const MODEL_URL = '../build/female_singer_anime_idol.glb';
+// Danh sách trạng thái, kiểu tóc và nhóm vật liệu không nằm trong file này.
+// Chúng đến từ build/manifest.json do quy trình dựng sinh ra từ
+// scripts/catalog.py, nên thêm một trạng thái chỉ cần sửa một chỗ duy nhất.
+const MANIFEST_URL = '../build/manifest.json';
+const BUILD_DIR = '../build/';
 const AUDIO_URL = '../audio/jpop_anime_beat.mp3';
+
+let manifest = null;
+let stateByClip = {};      // ten clip -> muc trong manifest
 
 let scene, camera, renderer, controls, clock;
 let characterModel = null, morphMeshes = [], mixer = null;
@@ -114,11 +118,97 @@ function init() {
     setupLighting();
     setupStage();
     setupAudioElement();
-    loadModel(MODEL_URL + '?v=' + Date.now());
     setupUIEventListeners();
 
     window.addEventListener('resize', onWindowResize);
     animate();
+
+    loadManifest().then(() => {
+        buildStateButtons();
+        buildHairstyleButtons();
+        loadModel(BUILD_DIR + manifest.model + '?v=' + Date.now());
+    });
+}
+
+// ==========================================
+// MANIFEST — danh mục do quy trình dựng sinh ra
+// ==========================================
+function loadManifest() {
+    return fetch(MANIFEST_URL + '?v=' + Date.now())
+        .then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+        })
+        .then(m => {
+            manifest = m;
+            stateByClip = {};
+            m.states.forEach(st => { stateByClip[st.clip] = st; });
+            currentActionName = m.defaultState;
+            return m;
+        })
+        .catch(err => {
+            showFatal('Không đọc được build/manifest.json',
+                      `${err.message}. Hãy dựng lại model bằng scripts/build_character.py, ` +
+                      `hoặc mở trang qua một máy chủ web thay vì mở thẳng file.`);
+            throw err;
+        });
+}
+
+function showFatal(title, detail) {
+    container.innerHTML = `<div style="position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);` +
+        `color:#fca5a5;text-align:center;font-family:sans-serif;background:rgba(15,23,42,0.96);` +
+        `padding:24px 28px;border-radius:12px;border:2px solid #ef4444;max-width:520px;">` +
+        `<h2 style="margin:0 0 8px;">${title}</h2>` +
+        `<p style="color:#cbd5e1;font-size:14px;line-height:1.55;margin:0;">${detail}</p></div>`;
+}
+
+function hexToRgba(hex, alpha) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function buildStateButtons() {
+    const grid = document.getElementById('state-btn-grid');
+    const title = document.getElementById('state-card-title');
+    if (title) title.textContent = `🎬 ${manifest.states.length} Trạng Thái Hoạt Ảnh Ca Sĩ Idol`;
+    if (!grid) return;
+    grid.innerHTML = '';
+    manifest.states.forEach(st => {
+        const b = document.createElement('button');
+        b.id = stateButtonId(st.clip);
+        b.className = 'btn state-btn' + (st.clip === manifest.defaultState ? ' active' : '');
+        b.textContent = `${st.order}. ${st.icon} ${st.label}`;
+        b.title = `${st.desc} — ${st.frames} frame @ ${st.fps} fps`;
+        b.style.borderColor = st.accent;
+        b.style.color = st.accent;
+        if (st.clip === manifest.defaultState) b.style.background = hexToRgba(st.accent, 0.18);
+        b.addEventListener('click', () => switchAnimationState(st.clip));
+        grid.appendChild(b);
+    });
+}
+
+function buildHairstyleButtons() {
+    const box = document.getElementById('hair-btn-grid');
+    const badge = document.getElementById('hair-count-badge');
+    if (badge) badge.textContent = `${manifest.hairstyles.length} KIỂU TÓC`;
+    if (!box) return;
+    box.innerHTML = '';
+    manifest.hairstyles.forEach((h, i) => {
+        const b = document.createElement('button');
+        b.id = `btn-hair-${h.key}`;
+        b.className = 'btn hair-btn' + (h.default ? ' active' : '');
+        b.style.cssText = 'justify-content:flex-start;padding:10px 12px;font-weight:700;font-size:13px;';
+        b.style.border = `1.5px solid ${h.accent}`;
+        b.style.color = h.accent;
+        if (h.default) b.style.background = hexToRgba(h.accent, 0.2);
+        b.textContent = `${h.icon} ${i + 1}. ${h.label} (${h.desc})`;
+        b.addEventListener('click', () => switchHairstyle(h.key));
+        box.appendChild(b);
+    });
+}
+
+function stateButtonId(clip) {
+    return 'btn-state-' + clip.replace(/[^A-Za-z0-9]/g, '_');
 }
 
 function setupLighting() {
@@ -240,20 +330,14 @@ function loadModel(path) {
                     morphMeshes.push(child);
                 }
 
-                // Identify Hairstyle Meshes
-                const nameL = child.name.toLowerCase();
-                if (nameL.includes('bob')) {
-                    hairMeshes['bob'] = child;
-                    child.visible = false;
-                } else if (nameL.includes('curled') || nameL.includes('wavy')) {
-                    hairMeshes['curled'] = child;
-                    child.visible = false;
-                } else if (nameL.includes('medium') || nameL.includes('shoulder')) {
-                    hairMeshes['medium'] = child;
-                    child.visible = false;
-                } else if (nameL.includes('hair') && !nameL.includes('hairback')) {
-                    hairMeshes['long'] = child;
-                    child.visible = true;
+                // Lưới tóc: khớp thẳng theo tên trong manifest thay vì đoán
+                // qua chuỗi con — cách đoán cũ làm các bản trùng tên ghi đè
+                // lẫn nhau và chỉ giữ lại bản cuối.
+                const hairEntry = manifest.hairstyles.find(h => h.mesh === child.name);
+                if (hairEntry) {
+                    hairMeshes[hairEntry.key] = child;
+                    child.visible = !!hairEntry.default;
+                    if (hairEntry.default) currentHairstyle = hairEntry.key;
                 }
             }
         });
@@ -297,12 +381,7 @@ function loadModel(path) {
 // ==========================================
 // MULTI-HAIRSTYLE SWITCHER ENGINE (4 STYLES)
 // ==========================================
-let hairMeshes = {
-    'long': null,
-    'curled': null,
-    'medium': null,
-    'bob': null
-};
+let hairMeshes = {};          // key trong manifest -> THREE.Mesh
 let currentHairstyle = 'long';
 
 window.switchHairstyle = function(styleName) {
@@ -311,24 +390,19 @@ window.switchHairstyle = function(styleName) {
         b.classList.remove('active');
         b.style.background = 'transparent';
     });
+    const entry = manifest.hairstyles.find(h => h.key === styleName);
     const activeBtn = document.getElementById(`btn-hair-${styleName}`);
-    if (activeBtn) {
+    if (activeBtn && entry) {
         activeBtn.classList.add('active');
-        if (styleName === 'long') activeBtn.style.background = 'rgba(192, 132, 252, 0.2)';
-        else if (styleName === 'curled') activeBtn.style.background = 'rgba(245, 158, 11, 0.2)';
-        else if (styleName === 'medium') activeBtn.style.background = 'rgba(236, 72, 153, 0.2)';
-        else if (styleName === 'bob') activeBtn.style.background = 'rgba(56, 189, 248, 0.2)';
+        activeBtn.style.background = hexToRgba(entry.accent, 0.2);
     }
 
     for (const key in hairMeshes) {
-        if (hairMeshes[key]) {
-            hairMeshes[key].visible = (key === styleName);
-        }
+        if (hairMeshes[key]) hairMeshes[key].visible = (key === styleName);
     }
 
-    // Sync hair color picker to the new hairstyle
-    const currentHairColor = document.getElementById('picker-hair') ? document.getElementById('picker-hair').value : '#ffffff';
-    changeCharacterColor('hair', currentHairColor);
+    const picker = document.getElementById('picker-hair');
+    changeCharacterColor('hair', picker ? picker.value : '#ffffff');
 };
 
 // ==========================================
@@ -541,18 +615,9 @@ function updateFacialAnimation(delta) {
 // ==========================================
 // REAL-TIME CHARACTER COLOR CUSTOMIZER
 // ==========================================
-const PART_MATERIAL_MAP = {
-    hair: ['Hair_00_HAIR', 'HairBack_00_HAIR'],
-    skin: ['Body_00_SKIN', 'Face_00_SKIN'],
-    eyes: ['EyeIris_00_EYE'],
-    tops: ['Tops_01_CLOTH'],
-    bottoms: ['Bottoms_01_CLOTH'],
-    shoes: ['Shoes_01_CLOTH']
-};
-
 function changeCharacterColor(part, hexColor) {
     if (!characterModel) return;
-    const targetMatNames = PART_MATERIAL_MAP[part];
+    const targetMatNames = manifest && manifest.materialGroups[part];
     if (!targetMatNames) return;
 
     characterModel.traverse((child) => {
@@ -720,83 +785,37 @@ function updateAnimationHUD(clipName) {
         hud.style.cssText = 'position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); border: 1px solid #ff4b8b; border-radius: 9999px; padding: 8px 24px; color: #fff; font-size: 14px; font-weight: 600; box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 1000; pointer-events: none; text-align: center;';
         document.body.appendChild(hud);
     }
-    const displayNameMap = {
-        '01_DungNghiem': '🧍 Trạng thái 1: Đứng Nghiêm Trang Trọng',
-        '02_DungNghi': '💃 Trạng thái 2: Đứng Nghỉ Chân Trái (Left Rest Idle)',
-        '07_DungNghi_DoiXung': '💃 Trạng thái 3: Đứng Nghỉ Chân Phải (Right Rest Idle)',
-        '03_TPose': '🤸 Trạng thái 4: Đứng Dạng T-Pose Chuẩn',
-        '04_BuocDi_CoBan': '🏃 Trạng thái 5: Bước Đi Cơ Bản',
-        '05_BuocDi_TuNhien': '🚶 Trạng thái 6: Bước Đi Điều Hòa Mượt Mà (Harmonic Mocap)',
-        '06_TroTay_PhiaTruoc': '👉 Trạng thái 7: Chỉ Tay Phải (Right Hand Point)',
-        '08_TroTay_Trai': '👈 Trạng thái 8: Chỉ Tay Trái (Left Hand Point)',
-        '09_HaiTay_SongSong': '🙌 Trạng thái 9: 2 Tay Song Song Về Phía Trước (Dual Arms Forward)',
-        '10_HaiTay_TruocMat': '🌸 Trạng thái 10: 2 Tay Song Song Trước Mặt (Dual Hands in Front of Face)',
-        '11_TraiTim_YeuThuong': '💖 Trạng thái 11: Bắn Tim 2 Tay Dễ Thương (Idol Heart Hands Pose) ✨',
-        '12_VayTay_ChaoHoi': '👋 Trạng thái 12: Vẫy Tay Chào Khán Giả Sân Khấu (Stage Wave Greeting) ✨',
-        '13_Cuoi_DuyenDang': '😄 Trạng thái 13: Cười Duyên Rạng Rỡ & Khẽ Cười Giggle (Radiant Smile Pose) ✨',
-        '14_CuiChao_KetThuc': '🙇‍♀️ Trạng thái 14: Cúi Chào Khán Giả Cảm Ơn Kết Màn (Stage Thank You Bow) ✨'
-    };
-    hud.innerHTML = `<span style="color: #ff4b8b;">Đang phát:</span> ${displayNameMap[clipName] || clipName}`;
+    const st = stateByClip[clipName];
+    const name = st ? `${st.icon} Trạng thái ${st.order}: ${st.desc}` : clipName;
+    hud.innerHTML = `<span style="color: #ff4b8b;">Đang phát:</span> ${name}`;
 }
 
-window.switchAnimationState = function(stateName) {
+window.switchAnimationState = function(clipName) {
     if (!mixer) return;
-    document.querySelectorAll('.state-btn').forEach(b => b.classList.remove('active'));
-
-    const btnIdMap = {
-        '01_DungNghiem': 'btn-state-1',
-        '02_DungNghi': 'btn-state-2',
-        '07_DungNghi_DoiXung': 'btn-state-7',
-        '03_TPose': 'btn-state-3',
-        '04_BuocDi_CoBan': 'btn-state-4',
-        '04_BuocDi': 'btn-state-4',
-        '05_BuocDi_TuNhien': 'btn-state-5',
-        '06_TroTay_PhiaTruoc': 'btn-state-6',
-        '08_TroTay_Trai': 'btn-state-8',
-        '09_HaiTay_SongSong': 'btn-state-9',
-        '10_HaiTay_TruocMat': 'btn-state-10',
-        '11_TraiTim_YeuThuong': 'btn-state-11',
-        '12_VayTay_ChaoHoi': 'btn-state-12',
-        '13_Cuoi_DuyenDang': 'btn-state-13',
-        '14_CuiChao_KetThuc': 'btn-state-14'
-    };
-    if (btnIdMap[stateName]) {
-        const btn = document.getElementById(btnIdMap[stateName]);
-        if (btn) btn.classList.add('active');
+    const nextAction = animationsMap[clipName];
+    if (!nextAction) {
+        console.warn('Không có clip', clipName, '— các clip có trong model:',
+                     Object.keys(animationsMap));
+        return;
     }
 
-    // Find matching action
-    let targetClipName = Object.keys(animationsMap).find(k => k === stateName) ||
-                         Object.keys(animationsMap).find(k => k.includes(stateName)) ||
-                         Object.keys(animationsMap).find(k => {
-                             if (stateName.includes('01')) return k.includes('01') || k.includes('Nghiem');
-                             if (stateName.includes('14')) return k.includes('14') || (k.includes('CuiChao') || k.includes('KetThuc'));
-                             if (stateName.includes('13')) return k.includes('13') || (k.includes('Cuoi') || k.includes('DuyenDang'));
-                             if (stateName.includes('12')) return k.includes('12') || (k.includes('VayTay') || k.includes('ChaoHoi'));
-                             if (stateName.includes('11')) return k.includes('11') || (k.includes('TraiTim') || k.includes('YeuThuong'));
-                             if (stateName.includes('10')) return k.includes('10') || (k.includes('HaiTay') && k.includes('TruocMat'));
-                             if (stateName.includes('09')) return k.includes('09') || (k.includes('HaiTay') && k.includes('SongSong'));
-                             if (stateName.includes('08')) return k.includes('08') || (k.includes('TroTay') && k.includes('Trai'));
-                             if (stateName.includes('07')) return k.includes('07') || k.includes('DoiXung');
-                             if (stateName.includes('06')) return k.includes('06') || k.includes('TroTay') || k.includes('PhiaTruoc');
-                             if (stateName.includes('02')) return k.includes('02') || k.includes('Nghi');
-                             if (stateName.includes('03')) return k.includes('03') || k.includes('TPose');
-                             if (stateName.includes('04')) return k.includes('04') || k.includes('CoBan');
-                             if (stateName.includes('05')) return k.includes('05') || k.includes('TuNhien');
-                             return false;
-                         });
-
-    console.log("Switching to state:", stateName, "-> Resolved Clip:", targetClipName);
-    const nextAction = animationsMap[targetClipName];
-    if (nextAction && nextAction !== currentAction) {
-        if (currentAction) {
-            currentAction.fadeOut(0.25);
-        }
-        nextAction.reset().fadeIn(0.25).play();
-        currentAction = nextAction;
-        currentActionName = targetClipName;
-        updateAnimationHUD(targetClipName);
+    document.querySelectorAll('.state-btn').forEach(b => {
+        b.classList.remove('active');
+        b.style.background = 'transparent';
+    });
+    const btn = document.getElementById(stateButtonId(clipName));
+    if (btn) {
+        btn.classList.add('active');
+        const st = stateByClip[clipName];
+        if (st) btn.style.background = hexToRgba(st.accent, 0.18);
     }
+
+    if (nextAction === currentAction) return;
+    if (currentAction) currentAction.fadeOut(0.25);
+    nextAction.reset().fadeIn(0.25).play();
+    currentAction = nextAction;
+    currentActionName = clipName;
+    updateAnimationHUD(clipName);
 };
 
 function setCameraView(view) {

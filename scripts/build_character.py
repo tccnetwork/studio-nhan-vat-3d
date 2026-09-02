@@ -3,6 +3,7 @@ import math
 import mathutils
 import bmesh
 import os
+import re
 import sys
 
 # Thư mục gốc dự án, suy ra từ vị trí file này (scripts/build_character.py).
@@ -16,6 +17,7 @@ BUILD_DIR = os.path.join(ROOT, 'build')     # kết quả dựng — ghi đè th
 
 sys.path.insert(0, os.path.join(ROOT, 'scripts'))
 import hairstyles
+import manifest
 
 def clean_scene():
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -293,6 +295,31 @@ def build_silky_soft_hair_5_states():
             merge_vertex_groups(body_obj, vg_name, 'J_Bip_L_UpperLeg')
         for vg_name in ['J_Aim_R_UpperLeg', 'J_Roll_R_UpperLeg', 'J_Sec_R_TopsUpperLegFront', 'J_Sec_R_TopsUpperLegBack', 'J_Sec_R_TopsUpperLegSide']:
             merge_vertex_groups(body_obj, vg_name, 'J_Bip_R_UpperLeg')
+
+    # Dọn vết tích của những vòng nhập/xuất glTF lặp lại. Mỗi vòng để lại một
+    # object rỗng mang tên trùng với lưới, nên model đã tích được 44 cái tên
+    # Face … Face.042 trước khi lưới thật phải lùi xuống thành "Face.043".
+    # Chúng chiếm chỗ trong danh sách node của file xuất và chặn việc đặt lại
+    # tên cho lưới thật.
+    strip = lambda n: re.sub(r'\.\d{3}$', '', n)
+    mesh_bases = {strip(o.name) for o in bpy.data.objects if o.type == 'MESH'}
+    junk = [o for o in bpy.data.objects
+            if o.type == 'EMPTY' and not o.children and strip(o.name) in mesh_bases]
+    if junk:
+        print(f"  Dọn {len(junk)} object rỗng trùng tên lưới "
+              f"({junk[0].name} … {junk[-1].name})")
+        for o in junk:
+            bpy.data.objects.remove(o, do_unlink=True)
+
+    for obj in list(bpy.data.objects):
+        if obj.type != 'MESH':
+            continue
+        base = strip(obj.name)
+        if base != obj.name and base not in bpy.data.objects:
+            print(f"  Chuẩn hoá tên lưới: {obj.name} -> {base}")
+            obj.name = base
+        if obj.data and re.search(r'\.\d{3}$', obj.data.name):
+            obj.data.name = strip(obj.data.name)
 
     bpy.context.view_layer.objects.active = char_arm
     if not char_arm.animation_data:
@@ -1588,8 +1615,16 @@ def build_silky_soft_hair_5_states():
                 kb['Face_Blendshape.Fcl_EYE_Close_L'].value = 1.0 if is_wink else 0.0
                 kb['Face_Blendshape.Fcl_EYE_Close_L'].keyframe_insert(data_path="value", frame=frame)
 
-    print(">>> Exporting PRISTINE 6-STATE GLB, FBX, BLEND WITH SILKY SOFT HAIR DRAPE...")
-    for folder, fname in [(out_b_dir, "female_singer_anime_idol")]:
+    MODEL_NAME = "female_singer_anime_idol"
+
+    print(">>> Ghi build/manifest.json từ scripts/catalog.py...")
+    manifest.write_manifest(os.path.join(out_b_dir, 'manifest.json'),
+                            model_file=MODEL_NAME + '.glb',
+                            source_file=os.path.basename(input_glb),
+                            actions=bpy.data.actions)
+
+    print(">>> Xuất GLB, FBX, BLEND...")
+    for folder, fname in [(out_b_dir, MODEL_NAME)]:
         bpy.ops.export_scene.gltf(
             filepath=f"{folder}/{fname}.glb",
             export_format='GLB',
@@ -1607,7 +1642,7 @@ def build_silky_soft_hair_5_states():
         )
         bpy.ops.wm.save_as_mainfile(filepath=f"{folder}/{fname}.blend")
         
-    print(">>> SILKY SOFT HAIR DRAPE BUILD COMPLETE!")
+    print(">>> DỰNG XONG. Kiểm tra bằng: python3 tools/verify_build.py")
 
 if __name__ == '__main__':
     build_silky_soft_hair_5_states()

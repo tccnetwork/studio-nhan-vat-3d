@@ -5,9 +5,9 @@ hoạt ảnh, 57 blendshape khuôn mặt và một trình xem chạy thẳng tr�
 
 ```
 source/     Model nguồn — CHỈ ĐỌC. Không script nào được ghi vào đây.
-build/      Kết quả dựng (glb / fbx / blend). Xóa lúc nào cũng được, dựng lại là có.
-web/        Trình xem 3D — bản duy nhất.
-scripts/    build_character.py dựng toàn bộ 14 trạng thái. Bản cũ nằm ở archive/.
+build/      Kết quả dựng (glb / fbx / blend / manifest.json). Dựng lại là có.
+web/        Trình xem 3D — bản duy nhất, tự sinh giao diện từ manifest.
+scripts/    catalog.py là danh mục gốc; build_character.py dựng 14 trạng thái.
 tools/      Tiện ích thao tác GLB, không cần Blender.
 mocap/      5 file BVH. Chưa dùng — xem "Việc còn dang dở".
 audio/      Nhạc nền cho trình xem.
@@ -35,12 +35,27 @@ một lệnh chặn ngay đầu hàm dựng để bảo đảm điều đó.
 Đối chiếu kết quả sau mỗi lần dựng:
 
 ```bash
+python3 tools/verify_build.py     # thoát khác 0 nếu lệch danh mục
 python3 tools/glb_report.py build/female_singer_anime_idol.glb
 ```
 
-Số lưới phải đúng **4 tóc** (`Hair`, `Hair_ShortBob`, `Hair_MediumShoulder`,
-`Hair_WavyCurled`) cộng `Body` và `Face`. Nếu xuất hiện tên kết thúc bằng
-`.001`, `.002`… thì quy trình đã lại chồng lớp — dừng và tìm nguyên nhân.
+`verify_build.py` đối chiếu file GLB với `scripts/catalog.py` và bắt đúng những
+thứ đã từng hỏng thật: lưới nhân bản đuôi `.001`, node rỗng tích tụ qua các vòng
+nhập/xuất, thiếu hoặc thừa clip, mất texture, và manifest lệch với GLB.
+
+## Thêm một trạng thái hoạt ảnh
+
+Danh sách trạng thái, kiểu tóc và nhóm vật liệu nằm ở **một chỗ duy nhất**:
+[`scripts/catalog.py`](scripts/catalog.py). Quy trình dựng đọc file đó rồi xuất
+`build/manifest.json`, và trình xem sinh toàn bộ nút bấm từ manifest.
+
+Trước đây cùng một danh sách nằm rải ở bốn nơi — nút trong `web/index.html`, hai
+bảng tra trong `web/app.js`, và tên clip trong script dựng — nên chúng đã kịp
+lệch nhau: thẻ ghi "13 Trạng Thái" trong khi model có 14.
+
+Các bước: thêm khối bake vào `scripts/build_character.py`, thêm một mục vào
+`STATES` trong `catalog.py`, dựng lại, chạy `verify_build.py`. Không phải đụng
+vào trình xem.
 
 ## Tiện ích GLB
 
