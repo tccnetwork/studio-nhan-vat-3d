@@ -22,6 +22,9 @@ ORDER = [
     ('13_Cuoi_DuyenDang', 's13_Cuoi_DuyenDang'),
     ('14_CuiChao_KetThuc', 's14_CuiChao_KetThuc'),
     ('15_BuocDi_Mocap', 's15_BuocDi_Mocap'),
+    ('16_VayTay_Mocap', 's16_VayTay_Mocap'),
+    ('17_NhayMua_Mocap', 's17_NhayMua_Mocap'),
+    ('18_DanChuyen_Mocap', 's18_DanChuyen_Mocap'),
 ]
 
 

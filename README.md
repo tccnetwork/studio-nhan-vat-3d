@@ -1,7 +1,8 @@
 # Studio Ca Sĩ 3D
 
-Nhân vật nữ ca sĩ anime idol dựng trên nền VRoid Studio, kèm 14 trạng thái
-hoạt ảnh, 57 blendshape khuôn mặt và một trình xem chạy thẳng trên trình duyệt.
+Nhân vật nữ ca sĩ anime idol dựng trên nền VRoid Studio, kèm 18 trạng thái
+hoạt ảnh (4 trong đó retarget từ mocap thật), 57 blendshape khuôn mặt và một
+trình xem chạy thẳng trên trình duyệt.
 
 ```
 source/     Model nguồn — CHỈ ĐỌC. Không script nào được ghi vào đây.
@@ -105,11 +106,6 @@ nhiều so với ban đầu, nhưng chủ dự án đánh giá vẫn chưa đư�
 Ba nút vặn ở cuối `scripts/hairstyles.py`: `hang` (xoè hay rơi thẳng),
 `evenness` (đường cắt đều hay tỉa layer), `z_back`/`z_side` (độ dài).
 
-**Mocap chưa được retarget.** `scripts/build_character.py` nạp
-`dataset-1_walk_happy_001.bvh` ở đầu rồi xóa ở cuối mà không dùng. Cả 14
-trạng thái, kể cả hai trạng thái đi bộ, đều là keyframe quaternion viết tay.
-Đây là việc chính của Giai đoạn 2.
-
 **Khẩu hình chưa bám lời hát.** Miệng xoay vòng nguyên âm theo đồng hồ chứ
 không theo âm vị, dù trình xem đã có phân tích FFT thật.
 
@@ -128,6 +124,24 @@ hình sai:
 * **Vật liệu kim loại.** Sàn sân khấu đặt `metalness: 0.8` mà cảnh không có
   environment map: r128 vẫn vẽ sáng, r180 tính đúng nên ra gần như đen. Đã hạ
   metalness thay vì thêm environment map, để không đổi cách nhân vật bắt sáng.
+
+## Thêm một trạng thái từ mocap
+
+Cả 4 trạng thái mocap chỉ là vài dòng, nhờ khuôn trong `scripts/retarget.py`:
+
+```python
+CLIP = '17_NhayMua_Mocap'
+bake = retarget.mocap_state(CLIP, 'dataset-1_dance-short_normal_001.bvh',
+                            offset=300, loop_lo=40, loop_hi=160, blend=8)
+```
+
+`offset` bỏ qua đoạn đầu bản ghi (diễn viên thường đứng chờ vài giây).
+`loop_lo`/`loop_hi` là khoảng frame để dò điểm lặp khép nhất. `blend` hoà mấy
+frame cuối về tư thế frame đầu — cần cho những đoạn không tuần hoàn như vũ đạo
+hay cử chỉ dẫn chuyện, vì cắt ở đâu cũng còn một cú giật.
+
+Thứ tự bên trong quan trọng: **làm khép vòng trước, khoá bàn chân sau**. Làm
+ngược lại thì phép hoà đuôi clip nhấc chân khỏi sàn ở đúng mấy frame vừa chỉnh.
 
 ## Thử nghiệm hình dạng tóc
 

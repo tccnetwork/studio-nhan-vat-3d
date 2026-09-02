@@ -23,6 +23,7 @@ Nên phép biến đổi chỉ còn một hệ số tỉ lệ, không có phép 
 """
 import bpy
 import math
+import os
 from mathutils import Vector
 
 # Hướng của một xương phải đo bằng vector từ khớp này tới **khớp con**, không
@@ -117,6 +118,99 @@ def _lowest_point(char_arm):
     return min(lows) if lows else 0.0
 
 
+LEG_CHAIN = {
+    'L': ('J_Bip_L_UpperLeg', 'J_Bip_L_LowerLeg', 'J_Bip_L_Foot', 'J_Bip_L_ToeBase'),
+    'R': ('J_Bip_R_UpperLeg', 'J_Bip_R_LowerLeg', 'J_Bip_R_Foot', 'J_Bip_R_ToeBase'),
+}
+
+
+def _sole_height(arm, side):
+    """Cao độ thấp nhất của bàn chân và mũi chân ở frame hiện tại."""
+    _, _, foot, toe = LEG_CHAIN[side]
+    zs = []
+    for n in (foot, toe):
+        pb = arm.pose.bones.get(n)
+        if pb:
+            zs += [pb.head.z, pb.tail.z]
+    return min(zs) if zs else 0.0
+
+
+def _two_bone_ik(arm, side, ankle_target):
+    """Đặt cổ chân vào ankle_target bằng cách giải góc gối theo hình học.
+
+    Giữ nguyên hướng gối mà mocap đã cho: dùng chính vị trí gối hiện tại làm
+    vector cực, nên chân không bị lật ngược ra sau khi giải.
+    """
+    upper, lower, foot, _toe = LEG_CHAIN[side]
+    pu, pl, pf = (arm.pose.bones.get(n) for n in (upper, lower, foot))
+    if not (pu and pl and pf):
+        return
+    hip = pu.head.copy()
+    l1 = (pl.head - pu.head).length
+    l2 = (pf.head - pl.head).length
+    axis = ankle_target - hip
+    d = axis.length
+    if d < 1e-5:
+        return
+    # Không cho chân duỗi thẳng hoàn toàn: gối thẳng đơ nhìn rất giả.
+    d = max(abs(l1 - l2) + 1e-4, min(d, (l1 + l2) * 0.999))
+    axis = axis.normalized()
+
+    pole = pl.head - hip
+    pole = pole - axis * pole.dot(axis)
+    if pole.length < 1e-5:
+        pole = Vector((0.0, -1.0, 0.0))          # gối hướng ra trước
+        pole = pole - axis * pole.dot(axis)
+    pole.normalize()
+
+    a = (l1 * l1 - l2 * l2 + d * d) / (2.0 * d)
+    h2 = l1 * l1 - a * a
+    h = math.sqrt(h2) if h2 > 0 else 0.0
+    knee = hip + axis * a + pole * h
+
+    foot_dir_before = _joint_dir(arm, foot, LEG_CHAIN[side][3])
+    _aim(arm, upper, lower, (knee - hip).normalized())
+    _aim(arm, lower, foot, (ankle_target - pl.head).normalized())
+    if foot_dir_before is not None:
+        _aim(arm, foot, LEG_CHAIN[side][3], foot_dir_before)
+
+
+def lock_feet(char_arm, act, frames, contact_band=0.03):
+    """Ép bàn chân chạm đúng mặt sàn trong những frame đang chống.
+
+    Bước retarget FK chỉ nâng cả clip lên một lần cho khớp toàn cục, nên trong
+    từng frame bàn chân vẫn có thể lơ lửng vài milimét tới hơn một xentimét.
+    Ở đây mỗi frame được chỉnh riêng bằng IK hai xương.
+    """
+    scene = bpy.context.scene
+    first, last = frames
+    fixed = 0
+    for side in ('L', 'R'):
+        heights = []
+        for f in range(first, last + 1):
+            scene.frame_set(f)
+            bpy.context.view_layer.update()
+            heights.append(_sole_height(char_arm, side))
+        floor = min(heights)
+        for i, f in enumerate(range(first, last + 1)):
+            lift = heights[i] - floor
+            if lift > contact_band:
+                continue                          # đang ở pha đưa chân, không đụng
+            if abs(heights[i]) < 1e-4:
+                continue
+            scene.frame_set(f)
+            bpy.context.view_layer.update()
+            upper, lower, foot, toe = LEG_CHAIN[side]
+            target = char_arm.pose.bones[foot].head.copy()
+            target.z -= heights[i]                # hạ hoặc nâng cho đúng mặt sàn
+            _two_bone_ik(char_arm, side, target)
+            for n in (upper, lower, foot):
+                char_arm.pose.bones[n].keyframe_insert(
+                    data_path='rotation_quaternion', frame=f)
+            fixed += 1
+    print(f'    khoá bàn chân: chỉnh {fixed} lượt chân-frame về đúng mặt sàn')
+
+
 def find_loop_length(bvh_arm, first, lo=16, hi=90):
     """Tìm độ dài clip khép kín nhất, tính bằng frame.
 
@@ -147,7 +241,7 @@ def find_loop_length(bvh_arm, first, lo=16, hi=90):
 
 
 def retarget(char_arm, bvh_arm, clip_name, frames=None,
-             in_place=True, ground=True, scale=None):
+             in_place=True, ground=True, scale=None, lock=True):
     """Bake một action mới trên char_arm từ chuyển động của bvh_arm.
 
     in_place : bỏ thành phần tịnh tiến theo hướng đi để clip lặp được tại chỗ;
@@ -179,6 +273,15 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
     hips_pb = char_arm.pose.bones['J_Bip_C_Hips']
     hips_rest = char_arm.data.bones['J_Bip_C_Hips'].head_local.copy()
 
+    # Quét trước quỹ đạo hông để tách phần đi tới khỏi phần dao động.
+    hips_y = []
+    for f in range(first, last + 1):
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        hips_y.append((bvh_arm.matrix_world @ bvh_arm.pose.bones['Hips'].head).y * scale)
+    span_n = max(1, len(hips_y) - 1)
+    drift = (hips_y[-1] - hips_y[0]) / span_n
+
     scene.frame_set(first)
     bpy.context.view_layer.update()
     origin = (bvh_arm.matrix_world @ bvh_arm.pose.bones['Hips'].head) * scale
@@ -194,7 +297,10 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
         hip_world = (bvh_arm.matrix_world @ bvh_arm.pose.bones['Hips'].head) * scale
         delta = hip_world - origin
         if in_place:
-            delta.y = 0.0          # bỏ quãng đường đi tới, giữ nhún dọc và lắc ngang
+            # Chỉ trừ đi phần đi tới đều, giữ lại dao động trước sau của hông.
+            # Ép thẳng Y = 0 sẽ xoá dao động đó và dồn nó xuống bàn chân, thành
+            # ra chân chống lúc nhanh lúc chậm — đúng cảm giác trượt patin.
+            delta.y -= drift * (src - first)
         # pose_bone.location nằm trong hệ trục riêng của xương chứ không phải
         # hệ thế giới, nên gán thẳng vector thế giới vào đó là dịch sai hướng.
         # Đặt qua ma trận rồi để Blender tự quy về location.
@@ -239,5 +345,71 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
                     kp.handle_right[1] += local_shift[axis]
                 fc.update()
 
+    if ground and lock:
+        lock_feet(char_arm, act, (1, out_frame))
+
     print(f'    đã bake {out_frame} frame vào "{clip_name}"')
     return act
+
+
+def close_loop(char_arm, act, n_frames, blend=6):
+    """Kéo mấy frame cuối về khớp với frame đầu để clip lặp không giật.
+
+    Đoạn mocap nào có chu kỳ thật — bước đi, vẫy tay — thì find_loop_length đã
+    cắt gọn. Nhưng vũ đạo hay cử chỉ dẫn chuyện thì không tuần hoàn, cắt ở đâu
+    cũng còn một cú giật ở chỗ nối. Ở đây mấy frame cuối được slerp dần về tư
+    thế của frame đầu, đổi lấy một chút biến dạng ở đuôi để hết giật.
+    """
+    scene = bpy.context.scene
+    bones = [char_arm.pose.bones[d] for _s, _sc, d, _dc in BONE_MAP
+             if d in char_arm.pose.bones]
+
+    scene.frame_set(1)
+    bpy.context.view_layer.update()
+    head_pose = {pb.name: pb.rotation_quaternion.copy() for pb in bones}
+
+    blend = min(blend, n_frames // 3)
+    for i in range(blend):
+        f = n_frames - blend + 1 + i
+        w = (i + 1) / (blend + 1)
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        for pb in bones:
+            cur = pb.rotation_quaternion.copy()
+            tgt = head_pose[pb.name].copy()
+            if cur.dot(tgt) < 0.0:
+                tgt.negate()               # tránh đi vòng xa trên mặt cầu
+            pb.rotation_quaternion = cur.slerp(tgt, w)
+            pb.keyframe_insert(data_path='rotation_quaternion', frame=f)
+    print(f'    làm khép vòng: hoà {blend} frame cuối về tư thế frame đầu')
+
+
+def mocap_state(clip_name, bvh_file, offset=0, loop_lo=20, loop_hi=90,
+                in_place=True, blend=0):
+    """Trả về hàm bake cho một trạng thái lấy chuyển động từ file BVH.
+
+    offset : bỏ qua bấy nhiêu frame đầu. Các bản ghi dài thường mở đầu bằng
+             đoạn diễn viên đứng chờ, lấy đúng đoạn đó thì clip không có gì.
+    """
+    def bake(char_arm, pb):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        bvh_arm, first, last = load_bvh(os.path.join(root, 'mocap', bvh_file))
+        try:
+            start = min(first + offset, last - loop_lo - 1)
+            hi = min(loop_hi, last - start - 1)
+            span = find_loop_length(bvh_arm, start, lo=loop_lo, hi=hi)
+            # Thứ tự quan trọng: làm khép vòng trước rồi mới khoá bàn chân.
+            # Làm ngược lại thì phép hoà đuôi clip sẽ nhấc chân khỏi sàn ở đúng
+            # mấy frame vừa được chỉnh cho chạm sàn.
+            act = retarget(char_arm, bvh_arm, clip_name,
+                           frames=(start, start + span - 1),
+                           in_place=in_place, ground=True, lock=not blend)
+            if blend:
+                close_loop(char_arm, act, span, blend=blend)
+                lock_feet(char_arm, act, (1, span))
+        finally:
+            discard_bvh(bvh_arm)
+            bpy.context.view_layer.objects.active = char_arm
+        return act
+
+    return bake

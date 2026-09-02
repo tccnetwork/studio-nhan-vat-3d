@@ -41,7 +41,13 @@ STATES = [
     dict(clip='14_CuiChao_KetThuc',  order=14, icon='🙇‍♀️', accent='#10b981',
          label='Cúi Chào Cảm Ơn',    desc='Cúi chào khán giả kết màn'),
     dict(clip='15_BuocDi_Mocap',     order=15, icon='🎯', accent='#22d3ee',
-         label='Đi (Mocap Thật)',    desc='Bước đi retarget từ mocap thật'),
+         label='Đi (Mocap)',         desc='Bước đi retarget từ mocap thật'),
+    dict(clip='16_VayTay_Mocap',     order=16, icon='🙋', accent='#34d399',
+         label='Vẫy Tay (Mocap)',    desc='Vẫy tay chào, retarget từ mocap'),
+    dict(clip='17_NhayMua_Mocap',    order=17, icon='💃', accent='#fb923c',
+         label='Vũ Đạo (Mocap)',     desc='Một đoạn vũ đạo retarget từ mocap'),
+    dict(clip='18_DanChuyen_Mocap',  order=18, icon='🗣️', accent='#818cf8',
+         label='Dẫn Chuyện (Mocap)', desc='Cử chỉ dẫn chuyện, retarget từ mocap'),
 ]
 
 # Clip điều khiển blendshape khuôn mặt, chạy song song với trạng thái cơ thể
