@@ -181,6 +181,11 @@ function hexToRgba(hex, alpha) {
 
 function buildStateButtons() {
     const grid = document.getElementById('state-btn-grid');
+    const pageTitle = document.getElementById('page-title');
+    if (pageTitle) {
+        pageTitle.textContent =
+            `Nữ Ca Sĩ Anime Idol — ${manifest.states.length} Trạng Thái Hoạt Ảnh`;
+    }
     const title = document.getElementById('state-card-title');
     if (title) title.textContent = `🎬 ${manifest.states.length} Trạng Thái Hoạt Ảnh Ca Sĩ Idol`;
     if (!grid) return;
