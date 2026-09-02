@@ -82,13 +82,19 @@ def build_hairstyles(char_arm):
             return t * t * (3.0 - 2.0 * t)
 
         def create_tapered_hairstyle(z_back, z_side, name, u_curve_depth=0.038,
-                                     hang=0.75):
+                                     hang=0.75, evenness=1.0):
             """
             z_back / z_side : cao độ kết thúc của vạt tóc sau lưng và vạt hai bên
             u_curve_depth   : độ cong hình chữ U của đường cắt sau lưng
             hang            : 1,0 giữ nguyên tỉ lệ xoè; càng nhỏ tóc càng rơi
                               thẳng. Tóc ngắn không với tới vai nên không có gì
                               đẩy nó ra ngoài — nó phải rơi thẳng hơn tóc dài.
+            evenness        : làm đều đường cắt. Các lọn trong mesh gốc kết thúc
+                              so le nhau 27 cm; rút ngắn chỉ nén khoảng so le đó
+                              theo tỉ lệ, nên trên một kiểu bob dài 18 cm vẫn còn
+                              10 cm so le — thành cạnh răng cưa ngay tầm quai hàm.
+                              Số nhỏ hơn 1 kéo các lọn ngắn xuống gần đường cắt
+                              chính, số bằng 1 giữ nguyên độ so le.
             """
             new_hair = orig_hair.copy()
             new_hair.data = orig_hair.data.copy()
@@ -105,6 +111,8 @@ def build_hairstyles(char_arm):
                 z_orig = v.co.z
                 t = (Z_HANG - z_orig) / orig_span
                 t = max(0.0, min(1.0, t))
+                if evenness != 1.0:
+                    t = t ** evenness
 
                 # Trọng số "thuộc vạt bên": mềm theo cả Y (ra trước) lẫn X (ra ngoài)
                 w_front = smoothstep(0.030, -0.060, v.co.y)
@@ -171,16 +179,19 @@ def build_hairstyles(char_arm):
             return new_hair
 
         # Kiểu 4 trên giao diện — Bob ngắn ôm gáy
-        create_tapered_hairstyle(1.300, 1.335, 'Hair_ShortBob',
-                                 u_curve_depth=0.026, hang=0.50)
+        # z_side thấp hơn z_back một chút: vạt trước dài hơn vạt sau (dáng A-line).
+        # Ngoài chuyện đúng kiểu, nó còn che kín khe hở trước tai — chỗ mà bản
+        # trước để lộ cổ vì vạt bên bị cắt cao hơn vạt sau 3,5 cm.
+        create_tapered_hairstyle(1.300, 1.292, 'Hair_ShortBob',
+                                 u_curve_depth=0.026, hang=0.15, evenness=0.68)
 
         # Kiểu 3 — Ngang vai
-        create_tapered_hairstyle(1.198, 1.240, 'Hair_MediumShoulder',
-                                 u_curve_depth=0.036, hang=0.70)
+        create_tapered_hairstyle(1.198, 1.192, 'Hair_MediumShoulder',
+                                 u_curve_depth=0.036, hang=0.35, evenness=0.80)
 
         # Kiểu 2 — Dài vừa
-        create_tapered_hairstyle(1.140, 1.180, 'Hair_WavyCurled',
-                                 u_curve_depth=0.044, hang=0.85)
+        create_tapered_hairstyle(1.140, 1.136, 'Hair_WavyCurled',
+                                 u_curve_depth=0.044, hang=0.55, evenness=0.90)
 
         print(">>> Multi-Hairstyle Collection Created Successfully with Salon-Grade U-Silhouette & 3D Contour!")
 
