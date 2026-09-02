@@ -2,6 +2,16 @@ import bpy
 import math
 import mathutils
 import bmesh
+import os
+
+# Thư mục gốc dự án, suy ra từ vị trí file này (scripts/build_character.py).
+# Blender chạy script qua Text Editor thì không có __file__, nên có đường lui.
+try:
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+except NameError:
+    ROOT = '/Volumes/DATA/ctg_ai/3d'
+SOURCE_DIR = os.path.join(ROOT, 'source')   # model nguồn — chỉ đọc
+BUILD_DIR = os.path.join(ROOT, 'build')     # kết quả dựng — ghi đè thoải mái
 
 def clean_scene():
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -233,10 +243,17 @@ def build_silky_soft_hair_5_states():
     print(">>> 1. Loading BVH Mocap Dataset & Character Model...")
     clean_scene()
     
-    bvh_path = '/Volumes/DATA/ctg_ai/3d/mocap/dataset-1_walk_happy_001.bvh'
-    input_glb = '/Volumes/DATA/ctg_ai/3d/phuong_an_B_anime_idol_female_singer/model/female_singer_anime_idol.glb'
-    out_b_dir = '/Volumes/DATA/ctg_ai/3d/phuong_an_B_anime_idol_female_singer/model'
-    stage_dir = '/Volumes/DATA/ctg_ai/3d/phuong_an_nang_cao_nu_ca_si_pro_stage/model'
+    # source/ chỉ đọc, build/ chỉ ghi. Trước Giai đoạn 0 hai đường dẫn này
+    # trỏ vào cùng một file, nên mỗi lần chạy lại là một lần chồng thêm bản
+    # sao kiểu tóc lên model — đến khi phát hiện thì đã có 6 bản thừa.
+    bvh_path = os.path.join(ROOT, 'mocap', 'dataset-1_walk_happy_001.bvh')
+    input_glb = os.path.join(SOURCE_DIR, 'female_singer_anime_idol_base.glb')
+    out_b_dir = BUILD_DIR
+
+    if os.path.commonpath([os.path.abspath(input_glb), os.path.abspath(out_b_dir)]) \
+            == os.path.abspath(SOURCE_DIR):
+        raise RuntimeError('Đầu ra đang trỏ vào source/ — dừng để không ghi đè model nguồn.')
+    os.makedirs(out_b_dir, exist_ok=True)
     
     # Import BVH
     bpy.ops.import_anim.bvh(filepath=bvh_path)
@@ -1648,7 +1665,7 @@ def build_silky_soft_hair_5_states():
                 kb['Face_Blendshape.Fcl_EYE_Close_L'].keyframe_insert(data_path="value", frame=frame)
 
     print(">>> Exporting PRISTINE 6-STATE GLB, FBX, BLEND WITH SILKY SOFT HAIR DRAPE...")
-    for folder, fname in [(out_b_dir, "female_singer_anime_idol"), (stage_dir, "female_singer_anime_pro")]:
+    for folder, fname in [(out_b_dir, "female_singer_anime_idol")]:
         bpy.ops.export_scene.gltf(
             filepath=f"{folder}/{fname}.glb",
             export_format='GLB',

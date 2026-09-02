@@ -1,4 +1,10 @@
-// Web 3D Studio for Anime 3D Idol Singer with 4 Animation States & Skeleton View
+// Studio 3D cho nhân vật nữ ca sĩ anime idol.
+//
+// Đường dẫn tài nguyên gom về một chỗ: Giai đoạn 1 sẽ thay khối này bằng
+// build/manifest.json do quy trình dựng sinh ra, để viewer tự biết có bao
+// nhiêu trạng thái thay vì phải viết cứng từng nút bấm.
+const MODEL_URL = '../build/female_singer_anime_idol.glb';
+const AUDIO_URL = '../audio/jpop_anime_beat.mp3';
 
 let scene, camera, renderer, controls, clock;
 let characterModel = null, morphMeshes = [], mixer = null;
@@ -108,7 +114,7 @@ function init() {
     setupLighting();
     setupStage();
     setupAudioElement();
-    loadModel('../model/female_singer_anime_idol.glb?v=' + Date.now());
+    loadModel(MODEL_URL + '?v=' + Date.now());
     setupUIEventListeners();
 
     window.addEventListener('resize', onWindowResize);
@@ -185,7 +191,7 @@ function setupStage() {
 }
 
 function setupAudioElement() {
-    audioElement = new Audio('../../audio/jpop_anime_beat.mp3');
+    audioElement = new Audio(AUDIO_URL);
     audioElement.crossOrigin = "anonymous";
     audioElement.loop = true;
 }
