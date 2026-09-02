@@ -40,6 +40,8 @@ STATES = [
          label='Cười Duyên',         desc='Cười rạng rỡ và khẽ giggle'),
     dict(clip='14_CuiChao_KetThuc',  order=14, icon='🙇‍♀️', accent='#10b981',
          label='Cúi Chào Cảm Ơn',    desc='Cúi chào khán giả kết màn'),
+    dict(clip='15_BuocDi_Mocap',     order=15, icon='🎯', accent='#22d3ee',
+         label='Đi (Mocap Thật)',    desc='Bước đi retarget từ mocap thật'),
 ]
 
 # Clip điều khiển blendshape khuôn mặt, chạy song song với trạng thái cơ thể

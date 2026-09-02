@@ -274,7 +274,6 @@ def build_character(wanted_states=None, fast=False):
     # source/ chỉ đọc, build/ chỉ ghi. Trước Giai đoạn 0 hai đường dẫn này
     # trỏ vào cùng một file, nên mỗi lần chạy lại là một lần chồng thêm bản
     # sao kiểu tóc lên model — đến khi phát hiện thì đã có 6 bản thừa.
-    bvh_path = os.path.join(ROOT, 'mocap', 'dataset-1_walk_happy_001.bvh')
     input_glb = os.path.join(SOURCE_DIR, 'female_singer_anime_idol_base.glb')
     # Dựng thiếu trạng thái thì không được ghi đè lên bản chính thức: kết quả
     # đó không khớp danh mục và sẽ làm verify_build.py báo lỗi nhầm.
@@ -285,20 +284,15 @@ def build_character(wanted_states=None, fast=False):
         raise RuntimeError('Đầu ra đang trỏ vào source/ — dừng để không ghi đè model nguồn.')
     os.makedirs(out_b_dir, exist_ok=True)
     
-    # Import BVH
-    bpy.ops.import_anim.bvh(filepath=bvh_path)
-    bvh_arm = [o for o in bpy.data.objects if o.type == 'ARMATURE'][0]
-    bvh_arm.name = 'BVH_Arm'
     
     # Import Character
     bpy.ops.import_scene.gltf(filepath=input_glb)
-    char_arm = [o for o in bpy.data.objects if o.type == 'ARMATURE' and o != bvh_arm][0]
+    char_arm = [o for o in bpy.data.objects if o.type == 'ARMATURE'][0]
     char_arm.name = 'Character_Armature'
     
     # Purge old actions
     for a in list(bpy.data.actions):
-        if a.name != 'dataset-1_walk_happy_001':
-            bpy.data.actions.remove(a)
+        bpy.data.actions.remove(a)
     if char_arm.animation_data:
         for t in list(char_arm.animation_data.nla_tracks):
             char_arm.animation_data.nla_tracks.remove(t)
@@ -359,12 +353,6 @@ def build_character(wanted_states=None, fast=False):
     # =========================================================================
     created_actions = states.bake_states(char_arm, pb, wanted=wanted_states)
 
-    # BVH nạp ở đầu hàm rồi xoá ở đây mà chưa hề được retarget. Giữ lại để
-    # Giai đoạn 2 dùng làm điểm bắt đầu; xem mục "Việc còn dang dở" trong README.
-    bpy.data.objects.remove(bvh_arm, do_unlink=True)
-    if bpy.data.actions.get('dataset-1_walk_happy_001'):
-        bpy.data.actions.remove(bpy.data.actions['dataset-1_walk_happy_001'])
-
 
     # DELETE ANY JUNK / GIANT / UNUSED MESHES (Beta_Surface, Icosphere, etc.)
     print(">>> Purging all giant/junk meshes (Beta_Surface, Icosphere, etc.)...")
@@ -387,6 +375,8 @@ def build_character(wanted_states=None, fast=False):
 
     print(">>> Actions in Blender database:", [a.name for a in bpy.data.actions])
 
+    if bpy.context.view_layer.objects.active is None:
+        bpy.context.view_layer.objects.active = char_arm
     bpy.ops.object.mode_set(mode='OBJECT')
 
     # =========================================================================
