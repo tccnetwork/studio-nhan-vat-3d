@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phương án 3: Procedural Stylized Cyber Singer 3D</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Three.js and GLTFLoader -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <header class="top-bar">
+        <div class="badge">PHƯƠNG ÁN 3</div>
+        <h1>Procedural Cyber Singer 3D (Sinh bằng Code Python)</h1>
+        <a href="../../index.html" class="btn-nav">← Dashboard So Sánh Song Song</a>
+    </header>
+
+    <div class="hud-panel left-panel">
+        <div class="card">
+            <h3> Thông Số Mô Hình</h3>
+            <ul class="stats-list">
+                <li><span>Định dạng:</span> <strong>GLTF 2.0 (.glb)</strong></li>
+                <li><span>Kích thước file:</span> <strong>228 KB (Cực nhẹ)</strong></li>
+                <li><span>Số lượng Đỉnh (Vertices):</span> <strong id="stat-verts">Đang tải...</strong></li>
+                <li><span>Số Mặt (Triangles):</span> <strong id="stat-triangles">Đang tải...</strong></li>
+                <li><span>Chất liệu PBR:</span> <strong>12 Materials (Neon, Chrome, Skin, Cloth)</strong></li>
+                <li><span>Animation:</span> <strong>Singing_Performance_VocalLoop (30 FPS)</strong></li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h3>⚙️ Điều Khiển Hiệu Ứng Sân Khấu</h3>
+            <div class="control-group">
+                <label>Đèn Spotlight xoay theo ca sĩ:</label>
+                <input type="checkbox" id="toggle-spotlight" checked>
+            </div>
+            <div class="control-group">
+                <label>Hiệu ứng Hạt Bụi Sân Khấu (Particles):</label>
+                <input type="checkbox" id="toggle-particles" checked>
+            </div>
+            <div class="control-group">
+                <label>Xem Khung Lưới (Wireframe):</label>
+                <input type="checkbox" id="toggle-wireframe">
+            </div>
+            <div class="control-group">
+                <label>Tự động xoay Camera (Auto-Rotate):</label>
+                <input type="checkbox" id="toggle-autorotate">
+            </div>
+        </div>
+    </div>
+
+    <div class="hud-panel right-panel">
+        <div class="card">
+            <h3>🎵 Điều Khiển Hát & Animation</h3>
+            <div class="btn-row">
+                <button id="btn-play-pause" class="btn primary">⏸ Tạm Dừng</button>
+                <button id="btn-reset-pose" class="btn">🔄 Reset Dáng</button>
+            </div>
+            
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Tốc độ hát (BPM):</span>
+                    <span id="val-speed">1.0x (120 BPM)</span>
+                </div>
+                <input type="range" id="slider-speed" min="0.3" max="2.0" step="0.1" value="1.0">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Âm thanh beat nhạc (Web Audio):</span>
+                </div>
+                <button id="btn-toggle-audio" class="btn audio-btn">🔊 Bật Nhạc Beat Sân Khấu</button>
+            </div>
+        </div>
+
+        <div class="card highlight-card">
+            <h3>💡 Đánh Giá Nhanh Phương Án 3</h3>
+            <p><strong>Ưu điểm:</strong> File cực nhẹ (~228KB), render siêu nhanh, tải trang tức thì (0.1s), không phụ thuộc asset ngoài, hiệu ứng màu neon PBR rực rỡ.</p>
+            <p><strong>Phù hợp:</strong> Web 3D tương tác, Game indie/casual, Mini-game di động, Banner 3D quảng cáo ca nhạc.</p>
+        </div>
+    </div>
+
+    <div class="controls-hint">
+        <span>🖱️ Chuột trái: Xoay 360° | Chuột phải: Di chuyển | Cuộn chuột: Zoom</span>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

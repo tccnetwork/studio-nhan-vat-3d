@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phong Cách B: Nữ Ca Sĩ Anime 3D Idol (4 Trạng Thái & Khung Xương)</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <header class="top-bar">
+        <div class="badge">PHONG CÁCH B (ANIME IDOL)</div>
+        <h1>4 Trạng Thái Hoạt Ảnh Nhân Vật (Đứng Nghiêm, Đứng Nghỉ, T-Pose, Bước Đi)</h1>
+        <div style="display: flex; gap: 8px;">
+            <button id="cam-full" class="btn-cam active" onclick="setCameraView('full')">🧍 Toàn Thân</button>
+            <button id="cam-face" class="btn-cam" onclick="setCameraView('face')">😊 Khuôn Mặt</button>
+            <button id="cam-hand" class="btn-cam" onclick="setCameraView('hand')">🖐️ Cận Cảnh Ngón Tay</button>
+            <a href="../../index.html" class="btn-nav">← Dashboard So Sánh</a>
+        </div>
+    </header>
+
+    <div class="hud-panel left-panel">
+        <div class="card">
+            <h3>✨ Cấu Trúc Khung Xương & Ngón Tay</h3>
+            <ul class="stats-list">
+                <li><span>Phong cách:</span> <strong>Anime 3D / VTuber Idol</strong></li>
+                <li><span>Định dạng:</span> <strong>GLTF 2.0 (.glb) / VRM ready</strong></li>
+                <li><span>Tổng số Bone:</span> <strong style="color: #38bdf8;">154 Bones Rig</strong></li>
+                <li><span>Xương ngón tay:</span> <strong style="color: #4ade80;">30 Đốt (Thumb, Index, Mid, Ring, Pinky 1-3)</strong></li>
+                <li><span>Khớp vai:</span> <strong>Articulated Shoulder Lifting</strong></li>
+                <li><span>Tóc (Hairstyle):</span> <strong>Twin-Tails Spring Physics</strong></li>
+                <li><span>Trang phục:</span> <strong>Áo & Quần theo 100% xương chân/tay</strong></li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h3>⚙️ Tùy Chọn Hiển Thị Sân Khấu</h3>
+            <div class="control-group">
+                <label><strong style="color: #38bdf8;">🦴 Hiện Khung Xương 3D (Show Skeleton):</strong></label>
+                <input type="checkbox" id="toggle-skeleton">
+            </div>
+            <div class="control-group">
+                <label>Hiệu Ứng Lấp Lánh (Idol Sparkles):</label>
+                <input type="checkbox" id="toggle-particles" checked>
+            </div>
+            <div class="control-group">
+                <label>Xem Khung Lưới (Wireframe):</label>
+                <input type="checkbox" id="toggle-wireframe">
+            </div>
+            <div class="control-group">
+                <label>Tự động xoay Camera:</label>
+                <input type="checkbox" id="toggle-autorotate">
+            </div>
+        </div>
+
+        <div class="card" style="border: 2px solid #c084fc; background: rgba(30, 27, 75, 0.85); box-shadow: 0 0 15px rgba(192, 132, 252, 0.25);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                <h3 style="color: #e9d5ff; margin: 0;">💇‍♀️ Bộ Sưu Tập Kiểu Tóc</h3>
+                <span style="font-size: 10px; background: #a855f7; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: 700;">4 KIỂU TÓC</span>
+            </div>
+            <p class="sub-hint" style="color: #cbd5e1; margin-bottom: 8px;">Nhấp vào nút để đổi kiểu tóc nhân vật tức thì:</p>
+            <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+                <button id="btn-hair-long" class="btn hair-btn active" style="justify-content: flex-start; padding: 10px 12px; border: 1.5px solid #c084fc; font-weight: 700; background: rgba(192, 132, 252, 0.2); font-size: 13px;" onclick="switchHairstyle('long')">
+                    ✨ 1. Tóc Dài Suôn Mượt (Long Silky Idol)
+                </button>
+                <button id="btn-hair-curled" class="btn hair-btn" style="justify-content: flex-start; padding: 10px 12px; border: 1.5px solid #f59e0b; font-weight: 700; color: #fde68a; background: rgba(245, 158, 11, 0.1); font-size: 13px;" onclick="switchHairstyle('curled')">
+                    🌸 2. Tóc Dài Vừa Thẳng Mượt (Medium-Long Silky)
+                </button>
+                <button id="btn-hair-medium" class="btn hair-btn" style="justify-content: flex-start; padding: 10px 12px; border: 1.5px solid #ec4899; font-weight: 700; color: #fbcfe8; background: rgba(236, 72, 153, 0.1); font-size: 13px;" onclick="switchHairstyle('medium')">
+                    🌸 3. Tóc Ngang Vai Thẳng Mượt (Shoulder Silky)
+                </button>
+                <button id="btn-hair-bob" class="btn hair-btn" style="justify-content: flex-start; padding: 10px 12px; border: 1.5px solid #38bdf8; font-weight: 700; color: #bae6fd; background: rgba(56, 189, 248, 0.1); font-size: 13px;" onclick="switchHairstyle('bob')">
+                    🎀 4. Tóc Bob Ngắn Thẳng Mượt (Short Bob Silky)
+                </button>
+            </div>
+        </div>
+
+        <div class="card" style="border: 2px solid #ec4899;">
+            <h3>🎨 Tùy Biến Màu Sắc (Skin / Hair / Cloth)</h3>
+            <div class="customizer-grid">
+                <!-- 1. TÓC (HAIR) -->
+                <div class="customizer-item">
+                    <div class="customizer-header">
+                        <span>💇 <strong>Màu Tóc (Hair):</strong></span>
+                        <input type="color" id="picker-hair" value="#ffffff" oninput="changeCharacterColor('hair', this.value)">
+                    </div>
+                    <div class="color-presets">
+                        <button class="preset-pill" style="background:#ffffff;" title="Trắng Bạc Gốc" onclick="applyColorPreset('hair', '#ffffff')"></button>
+                        <button class="preset-pill" style="background:#ffc0cb;" title="Hồng Sakura Idol" onclick="applyColorPreset('hair', '#ffc0cb')"></button>
+                        <button class="preset-pill" style="background:#fef08a;" title="Vàng Anime Gold" onclick="applyColorPreset('hair', '#fef08a')"></button>
+                        <button class="preset-pill" style="background:#e0e7ff;" title="Bạch Kim Platinum" onclick="applyColorPreset('hair', '#e0e7ff')"></button>
+                        <button class="preset-pill" style="background:#854d0e;" title="Nâu Hạt Dẻ" onclick="applyColorPreset('hair', '#854d0e')"></button>
+                        <button class="preset-pill" style="background:#c084fc;" title="Tím Lavender" onclick="applyColorPreset('hair', '#c084fc')"></button>
+                        <button class="preset-pill" style="background:#22d3ee;" title="Xanh Cyber Mint" onclick="applyColorPreset('hair', '#22d3ee')"></button>
+                        <button class="preset-pill" style="background:#1e293b;" title="Đen Tuyền" onclick="applyColorPreset('hair', '#1e293b')"></button>
+                    </div>
+                </div>
+
+                <!-- 2. DA (SKIN) -->
+                <div class="customizer-item">
+                    <div class="customizer-header">
+                        <span>🌸 <strong>Màu Da (Skin):</strong></span>
+                        <input type="color" id="picker-skin" value="#ffffff" oninput="changeCharacterColor('skin', this.value)">
+                    </div>
+                    <div class="color-presets">
+                        <button class="preset-pill" style="background:#ffffff;" title="Trắng Sáng Nguyên Bản" onclick="applyColorPreset('skin', '#ffffff')"></button>
+                        <button class="preset-pill" style="background:#ffe4e6;" title="Trắng Hồng Tuyết" onclick="applyColorPreset('skin', '#ffe4e6')"></button>
+                        <button class="preset-pill" style="background:#fef3c7;" title="Tự Nhiên Ấm Áp" onclick="applyColorPreset('skin', '#fef3c7')"></button>
+                        <button class="preset-pill" style="background:#fed7aa;" title="Rạng Rỡ Tan" onclick="applyColorPreset('skin', '#fed7aa')"></button>
+                        <button class="preset-pill" style="background:#d97706;" title="Rám Nắng Khỏe Khoắn" onclick="applyColorPreset('skin', '#d97706')"></button>
+                    </div>
+                </div>
+
+                <!-- 3. MẮT (EYES) -->
+                <div class="customizer-item">
+                    <div class="customizer-header">
+                        <span>👁️ <strong>Màu Mắt (Eyes):</strong></span>
+                        <input type="color" id="picker-eyes" value="#ffffff" oninput="changeCharacterColor('eyes', this.value)">
+                    </div>
+                    <div class="color-presets">
+                        <button class="preset-pill" style="background:#ffffff;" title="Màu Gốc Nguyên Bản" onclick="applyColorPreset('eyes', '#ffffff')"></button>
+                        <button class="preset-pill" style="background:#38bdf8;" title="Xanh Sapphire" onclick="applyColorPreset('eyes', '#38bdf8')"></button>
+                        <button class="preset-pill" style="background:#c084fc;" title="Tím Thạch Anh" onclick="applyColorPreset('eyes', '#c084fc')"></button>
+                        <button class="preset-pill" style="background:#f43f5e;" title="Đỏ Ruby" onclick="applyColorPreset('eyes', '#f43f5e')"></button>
+                        <button class="preset-pill" style="background:#fbbf24;" title="Hổ Phách Amber" onclick="applyColorPreset('eyes', '#fbbf24')"></button>
+                        <button class="preset-pill" style="background:#34d399;" title="Xanh Ngọc Emerald" onclick="applyColorPreset('eyes', '#34d399')"></button>
+                    </div>
+                </div>
+
+                <!-- 4. ÁO (TOPS) -->
+                <div class="customizer-item">
+                    <div class="customizer-header">
+                        <span>👚 <strong>Màu Áo (Top / Jacket):</strong></span>
+                        <input type="color" id="picker-tops" value="#ffffff" oninput="changeCharacterColor('tops', this.value)">
+                    </div>
+                    <div class="color-presets">
+                        <button class="preset-pill" style="background:#ffffff;" title="Trắng Tinh Khôi" onclick="applyColorPreset('tops', '#ffffff')"></button>
+                        <button class="preset-pill" style="background:#18181b;" title="Đen Sang Trọng" onclick="applyColorPreset('tops', '#18181b')"></button>
+                        <button class="preset-pill" style="background:#f43f5e;" title="Đỏ Idol" onclick="applyColorPreset('tops', '#f43f5e')"></button>
+                        <button class="preset-pill" style="background:#0284c7;" title="Xanh Hoàng Gia" onclick="applyColorPreset('tops', '#0284c7')"></button>
+                        <button class="preset-pill" style="background:#f472b6;" title="Hồng Pastel" onclick="applyColorPreset('tops', '#f472b6')"></button>
+                        <button class="preset-pill" style="background:#a855f7;" title="Tím Cyber" onclick="applyColorPreset('tops', '#a855f7')"></button>
+                    </div>
+                </div>
+
+                <!-- 5. VÁY / QUẦN (BOTTOMS) -->
+                <div class="customizer-item">
+                    <div class="customizer-header">
+                        <span>👗 <strong>Màu Váy / Quần (Skirt):</strong></span>
+                        <input type="color" id="picker-bottoms" value="#ffffff" oninput="changeCharacterColor('bottoms', this.value)">
+                    </div>
+                    <div class="color-presets">
+                        <button class="preset-pill" style="background:#ffffff;" title="Trắng Tinh Khôi" onclick="applyColorPreset('bottoms', '#ffffff')"></button>
+                        <button class="preset-pill" style="background:#18181b;" title="Đen Huyền Bí" onclick="applyColorPreset('bottoms', '#18181b')"></button>
+                        <button class="preset-pill" style="background:#1e3a8a;" title="Xanh Denim" onclick="applyColorPreset('bottoms', '#1e3a8a')"></button>
+                        <button class="preset-pill" style="background:#be123c;" title="Đỏ Caro" onclick="applyColorPreset('bottoms', '#be123c')"></button>
+                        <button class="preset-pill" style="background:#ec4899;" title="Hồng Kẹo Ngọt" onclick="applyColorPreset('bottoms', '#ec4899')"></button>
+                    </div>
+                </div>
+
+                <!-- 6. GIÀY (SHOES) -->
+                <div class="customizer-item">
+                    <div class="customizer-header">
+                        <span>👠 <strong>Màu Giày (Shoes):</strong></span>
+                        <input type="color" id="picker-shoes" value="#ffffff" oninput="changeCharacterColor('shoes', this.value)">
+                    </div>
+                    <div class="color-presets">
+                        <button class="preset-pill" style="background:#ffffff;" title="Trắng Sneaker" onclick="applyColorPreset('shoes', '#ffffff')"></button>
+                        <button class="preset-pill" style="background:#18181b;" title="Đen Da Bóng" onclick="applyColorPreset('shoes', '#18181b')"></button>
+                        <button class="preset-pill" style="background:#f43f5e;" title="Đỏ Nổi Bật" onclick="applyColorPreset('shoes', '#f43f5e')"></button>
+                        <button class="preset-pill" style="background:#8b5cf6;" title="Tím Neon" onclick="applyColorPreset('shoes', '#8b5cf6')"></button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
+                <button class="btn" style="flex: 1; justify-content: center; background: linear-gradient(135deg, #a855f7, #ec4899); border: none; color: #fff; padding: 7px; border-radius: 6px; cursor: pointer;" onclick="randomizeCharacterStyle()">🎲 Phối Ngẫu Nhiên</button>
+                <button class="btn" style="flex: 1; justify-content: center; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 7px; border-radius: 6px; cursor: pointer;" onclick="resetCharacterColors()">🔄 Khôi Phục</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="hud-panel right-panel">
+        <!-- 13 ANIMATION STATES CARD -->
+        <div class="card highlight-card" style="border: 2px solid #38bdf8; background: rgba(15, 23, 42, 0.9); max-height: 480px; overflow-y: auto;">
+            <h3 style="color: #38bdf8;">🎬 13 Trạng Thái Hoạt Ảnh Ca Sĩ Idol</h3>
+            <p class="sub-hint">Bấm chọn để chuyển đổi tư thế nhân vật ngay lập tức:</p>
+            <div class="state-btn-grid" style="grid-template-columns: 1fr 1fr; gap: 6px;">
+                <button id="btn-state-1" class="btn state-btn active" onclick="switchAnimationState('01_DungNghiem')">1. 🧍 Đứng Nghiêm</button>
+                <button id="btn-state-2" class="btn state-btn" onclick="switchAnimationState('02_DungNghi')">2. 💃 Nghỉ (Trái)</button>
+                <button id="btn-state-7" class="btn state-btn" style="border-color: #c084fc; color: #e9d5ff; font-weight: 600;" onclick="switchAnimationState('07_DungNghi_DoiXung')">3. 💃 Nghỉ (Phải)</button>
+                <button id="btn-state-3" class="btn state-btn" onclick="switchAnimationState('03_TPose')">4. 🤸 T-Pose</button>
+                <button id="btn-state-4" class="btn state-btn" onclick="switchAnimationState('04_BuocDi_CoBan')">5. 🏃 Đi Cơ Bản</button>
+                <button id="btn-state-5" class="btn state-btn" style="border-color: #4ade80; color: #4ade80;" onclick="switchAnimationState('05_BuocDi_TuNhien')">6. 🚶 Đi Tự Nhiên</button>
+                <button id="btn-state-6" class="btn state-btn" style="border-color: #f43f5e; color: #f43f5e; font-weight: 700;" onclick="switchAnimationState('06_TroTay_PhiaTruoc')">7. 👉 Chỉ Tay Phải</button>
+                <button id="btn-state-8" class="btn state-btn" style="border-color: #fb7185; color: #ffe4e6; font-weight: 700;" onclick="switchAnimationState('08_TroTay_Trai')">8. 👈 Chỉ Tay Trái</button>
+                <button id="btn-state-9" class="btn state-btn" style="border-color: #38bdf8; color: #38bdf8; font-weight: 700; background: rgba(56, 189, 248, 0.1);" onclick="switchAnimationState('09_HaiTay_SongSong')">9. 🙌 2 Tay Song Song</button>
+                <button id="btn-state-10" class="btn state-btn" style="border-color: #f472b6; color: #fbcfe8; font-weight: 700; background: rgba(244, 114, 182, 0.1);" onclick="switchAnimationState('10_HaiTay_TruocMat')">10. 🌸 2 Tay Trước Mặt</button>
+                <button id="btn-state-11" class="btn state-btn" style="border-color: #ec4899; color: #f472b6; font-weight: 700; background: rgba(236, 72, 153, 0.12);" onclick="switchAnimationState('11_TraiTim_YeuThuong')">11. 💖 Bắn Tim 2 Tay ✨</button>
+                <button id="btn-state-12" class="btn state-btn" style="border-color: #eab308; color: #fef08a; font-weight: 700; background: rgba(234, 179, 8, 0.12);" onclick="switchAnimationState('12_VayTay_ChaoHoi')">12. 👋 Vẫy Tay Chào ✨</button>
+                <button id="btn-state-13" class="btn state-btn" style="border-color: #f59e0b; color: #fef3c7; font-weight: 700; background: rgba(245, 158, 11, 0.15);" onclick="switchAnimationState('13_Cuoi_DuyenDang')">13. 😄 Cười Duyên & Giggle ✨</button>
+                <button id="btn-state-14" class="btn state-btn" style="border-color: #10b981; color: #a7f3d0; font-weight: 700; background: rgba(16, 185, 129, 0.12);" onclick="switchAnimationState('14_CuiChao_KetThuc')">14. 🙇‍♀️ Cúi Chào Cảm Ơn ✨</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 style="color: #fb7185;">💖 Nụ Cười & Biểu Cảm Khuôn Mặt</h3>
+            
+            <!-- Dynamic Smile Controls -->
+            <div class="control-group">
+                <label><strong style="color: #fbbf24;">😊 Tự Động Cười Duyên (Dynamic Smile):</strong></label>
+                <input type="checkbox" id="toggle-auto-smile" checked onchange="onAutoSmileToggle(this.checked)">
+            </div>
+            <div style="margin: 8px 0;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
+                    <span style="color: #e2e8f0;">Độ Tươi Cười:</span>
+                    <span id="smile-val-display" style="color: #fbbf24; font-weight: 700;">65%</span>
+                </div>
+                <input type="range" id="slider-smile" min="0" max="100" value="65" style="width: 100%; accent-color: #fbbf24;" oninput="onSmileSliderChange(this.value)">
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-bottom: 10px;">
+                <button class="btn" style="padding: 4px 6px; font-size: 11px; justify-content: center;" onclick="setSmilePreset(0)">😐 Nghiêm</button>
+                <button class="btn" style="padding: 4px 6px; font-size: 11px; justify-content: center; border-color: #fbbf24; color: #fef08a;" onclick="setSmilePreset(50)">😊 Cười Mỉm</button>
+                <button class="btn" style="padding: 4px 6px; font-size: 11px; justify-content: center; border-color: #ec4899; color: #fbcfe8;" onclick="setSmilePreset(100)">😄 Cười Tươi</button>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 8px 0;">
+
+            <div class="control-group">
+                <label><strong style="color: #38bdf8;">👁️ Chớp 2 Mắt Dứt Khoát (Snappy Blink):</strong></label>
+                <input type="checkbox" id="toggle-auto-blink" checked>
+            </div>
+            <div class="control-group">
+                <label><strong style="color: #ec4899;">😉 Tự Động Nháy 1 Mắt (Playful Wink):</strong></label>
+                <input type="checkbox" id="toggle-auto-wink" checked>
+            </div>
+            <div style="margin-top: 6px;">
+                <button class="btn" style="width: 100%; justify-content: center; background: linear-gradient(135deg, #ec4899, #f43f5e); border: none; color: #fff; padding: 7px; border-radius: 6px; cursor: pointer;" onclick="triggerManualWink()">😉 Nháy Mắt Ngay (Wink Now!)</button>
+            </div>
+            <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;">
+            <div class="control-group">
+                <label><strong>Tự Động Hát (Auto Idol Lip-Sync):</strong></label>
+                <input type="checkbox" id="toggle-auto-lipsync" checked>
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header"><span>Âm 'A' (Mở miệng tam giác):</span><span id="val-aa">0%</span></div>
+                <input type="range" class="morph-slider" id="morph-aa" min="0" max="1" step="0.05" value="0">
+            </div>
+            <div class="slider-group">
+                <div class="slider-header"><span>Âm 'O' (Chúm môi tròn):</span><span id="val-O">0%</span></div>
+                <input type="range" class="morph-slider" id="morph-O" min="0" max="1" step="0.05" value="0">
+            </div>
+            <div class="slider-group">
+                <div class="slider-header"><span>Âm 'E' (Cười híp mí):</span><span id="val-E">0%</span></div>
+                <input type="range" class="morph-slider" id="morph-E" min="0" max="1" step="0.05" value="0">
+            </div>
+            <div class="slider-group">
+                <div class="slider-header"><span>😉 Nháy mắt tinh nghịch (Wink):</span><span id="val-wink">0%</span></div>
+                <input type="range" class="morph-slider" id="morph-wink" min="0" max="1" step="0.05" value="0">
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>🎵 Âm Nhạc Sân Khấu</h3>
+            <div class="btn-row">
+                <button id="btn-play-pause" class="btn primary">⏸ Tạm Dừng Hoạt Ảnh</button>
+            </div>
+            <div style="margin-top: 8px;">
+                <button id="btn-toggle-audio" class="btn audio-btn">🎶 Bật Nhạc J-Pop Beat</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

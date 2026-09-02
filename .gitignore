@@ -1,0 +1,20 @@
+# --- File nhị phân tái tạo được từ quy trình dựng ---
+build/
+*.glb
+*.fbx
+*.blend
+*.blend1
+
+# --- Nguồn: theo dõi bằng tay, không đẩy lên git ---
+# source/ chứa model gốc bất biến, sao lưu riêng (xem README)
+source/
+
+# --- Tài sản media nặng ---
+audio/
+mocap/
+external_library_animations/
+
+# --- Rác hệ thống ---
+.DS_Store
+__pycache__/
+*.pyc

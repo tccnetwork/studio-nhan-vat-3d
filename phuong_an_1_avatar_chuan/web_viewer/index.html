@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phương án 1: Standard Humanoid Singer Avatar 3D</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Three.js and GLTFLoader -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <header class="top-bar">
+        <div class="badge">PHƯƠNG ÁN 1</div>
+        <h1>Humanoid Singer Avatar 3D (Rig Chuẩn + Lip-Sync Khẩu Hình)</h1>
+        <a href="../../index.html" class="btn-nav">← Dashboard So Sánh Song Song</a>
+    </header>
+
+    <div class="hud-panel left-panel">
+        <div class="card">
+            <h3>📊 Thông Số Avatar Chuẩn</h3>
+            <ul class="stats-list">
+                <li><span>Định dạng:</span> <strong>GLTF 2.0 (.glb) / .fbx</strong></li>
+                <li><span>Kích thước file:</span> <strong>379 KB</strong></li>
+                <li><span>Số lượng Đỉnh (Vertices):</span> <strong id="stat-verts">Đang tải...</strong></li>
+                <li><span>Số Mặt (Triangles):</span> <strong id="stat-triangles">Đang tải...</strong></li>
+                <li><span>Bộ xương (Rigging):</span> <strong>Standard Humanoid (19 Bones)</strong></li>
+                <li><span>Skinning (Gắn da):</span> <strong>4-Weight Linear Blend Skinning</strong></li>
+                <li><span>Khẩu hình (Morph Targets):</span> <strong>7 Visemes (A, O, E, U, Jaw, Smile, Blink)</strong></li>
+                <li><span>Animation:</span> <strong>Live Singing Performance (30 FPS)</strong></li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h3>⚙️ Tùy Chọn Hiển Thị & Khung Xương</h3>
+            <div class="control-group">
+                <label>Hiện Bộ Xương Chuyển Động (Skeleton):</label>
+                <input type="checkbox" id="toggle-skeleton">
+            </div>
+            <div class="control-group">
+                <label>Xem Khung Lưới (Wireframe):</label>
+                <input type="checkbox" id="toggle-wireframe">
+            </div>
+            <div class="control-group">
+                <label>Tự động xoay Camera (Auto-Rotate):</label>
+                <input type="checkbox" id="toggle-autorotate">
+            </div>
+            <div class="control-group">
+                <label>Đèn Spotlight Sân Khấu:</label>
+                <input type="checkbox" id="toggle-spotlight" checked>
+            </div>
+        </div>
+    </div>
+
+    <div class="hud-panel right-panel">
+        <div class="card highlight-card">
+            <h3>🎤 Studio Khẩu Hình & Lip-Sync (Morph Targets)</h3>
+            <div class="control-group">
+                <label><strong>Chế độ Hát Tự Động (Auto Lip-Sync):</strong></label>
+                <input type="checkbox" id="toggle-auto-lipsync" checked>
+            </div>
+            <p class="sub-hint">Bỏ chọn để tự tay kéo thanh trượt thử nghiệm từng khẩu hình phát âm:</p>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Âm 'A' (viseme_aa):</span>
+                    <span id="val-aa">0%</span>
+                </div>
+                <input type="range" class="morph-slider" id="morph-aa" min="0" max="1" step="0.05" value="0">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Âm 'O' (viseme_O):</span>
+                    <span id="val-O">0%</span>
+                </div>
+                <input type="range" class="morph-slider" id="morph-O" min="0" max="1" step="0.05" value="0">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Âm 'E' (viseme_E):</span>
+                    <span id="val-E">0%</span>
+                </div>
+                <input type="range" class="morph-slider" id="morph-E" min="0" max="1" step="0.05" value="0">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Âm 'U' (viseme_U):</span>
+                    <span id="val-U">0%</span>
+                </div>
+                <input type="range" class="morph-slider" id="morph-U" min="0" max="1" step="0.05" value="0">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Hàm mở to (jawOpen):</span>
+                    <span id="val-jaw">0%</span>
+                </div>
+                <input type="range" class="morph-slider" id="morph-jaw" min="0" max="1" step="0.05" value="0">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Mỉm cười (mouthSmile):</span>
+                    <span id="val-smile">0%</span>
+                </div>
+                <input type="range" class="morph-slider" id="morph-smile" min="0" max="1" step="0.05" value="0">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Nhắm mắt phiêu (eyesClosed):</span>
+                    <span id="val-blink">0%</span>
+                </div>
+                <input type="range" class="morph-slider" id="morph-blink" min="0" max="1" step="0.05" value="0">
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>🎵 Hoạt Ảnh Biểu Diễn</h3>
+            <div class="btn-row">
+                <button id="btn-play-pause" class="btn primary">⏸ Tạm Dừng</button>
+                <button id="btn-reset-pose" class="btn">🔄 Reset Dáng</button>
+            </div>
+            
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Tốc độ biểu diễn:</span>
+                    <span id="val-speed">1.0x</span>
+                </div>
+                <input type="range" id="slider-speed" min="0.3" max="2.0" step="0.1" value="1.0">
+            </div>
+
+            <button id="btn-toggle-audio" class="btn audio-btn">🔊 Bật Nhạc Hát Demo</button>
+        </div>
+    </div>
+
+    <div class="controls-hint">
+        <span>🖱️ Chuột trái: Xoay 360° | Chuột phải: Di chuyển | Cuộn chuột: Zoom</span>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+}
+
+body {
+    background: #060911;
+    color: #f1f5f9;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    background: rgba(15, 23, 42, 0.95);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 100;
+}
+
+.header-left h1 {
+    font-size: 1.15rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #38bdf8, #ec4899, #fbbf24);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.header-left p {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 2px;
+}
+
+.stage-control-bar {
+    background: rgba(30, 41, 59, 0.9);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 8px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    z-index: 90;
+}
+
+.music-group, .choreo-group, .view-mode-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.badge-music {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #38bdf8;
+    margin-right: 4px;
+}
+
+.badge-choreo {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #ec4899;
+    margin-right: 4px;
+}
+
+.btn {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+}
+
+.btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.btn.primary {
+    background: linear-gradient(135deg, #0284c7, #ec4899);
+    border: none;
+}
+
+.btn.music-btn.active {
+    background: #0284c7;
+    border-color: #38bdf8;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+}
+
+.btn.choreo-btn.active {
+    background: #db2777;
+    border-color: #f472b6;
+    box-shadow: 0 0 12px rgba(236, 72, 153, 0.4);
+}
+
+.btn.mode-btn.active {
+    background: #475569;
+    border-color: #94a3b8;
+}
+
+.btn.stop-btn {
+    background: #e11d48;
+    border: none;
+}
+
+#stage-viewport {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #020408;
+}
+
+.stage-hud {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    z-index: 50;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(10px);
+    padding: 12px 18px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 320px;
+}
+
+.hud-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.8rem;
+}
+
+.hud-label {
+    color: #94a3b8;
+}
+
+.hud-value {
+    font-weight: 700;
+    color: #f1f5f9;
+}
+
+.meter-bar {
+    width: 100px;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.meter-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #38bdf8, #ec4899);
+    transition: width 0.05s ease-out;
+}

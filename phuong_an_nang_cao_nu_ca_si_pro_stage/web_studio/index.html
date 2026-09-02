@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sân Khấu Hòa Nhạc 3D Pro: Nữ Ca Sĩ Biểu Diễn Vũ Đạo & Hát Live Chuyên Nghiệp</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+
+    <header>
+        <div class="header-left">
+            <h1>🎤 SÂN KHẤU HÒA NHẠC 3D PRO: NỮ CA SĨ HÁT & VŨ ĐẠO LIVE</h1>
+            <p>Hệ thống mô phỏng động tác ca sĩ thực tế: Cầm micro nốt cao, vươn tay cảm xúc, nhún nhảy nhịp điệu và nhép môi theo sóng âm</p>
+        </div>
+
+        <div class="header-right">
+            <button id="btn-toggle-skeleton" class="btn" style="border-color: #38bdf8; color: #38bdf8;">🦴 Hiện Khung Xương (Skeleton)</button>
+            <button id="btn-toggle-camera" class="btn primary">📷 Góc Máy: Toàn Thân / Cận Cảnh Tay</button>
+            <a href="../../index.html" class="btn">🏠 Về Trang Chủ</a>
+        </div>
+    </header>
+
+    <!-- Music Control Banner -->
+    <div class="stage-control-bar">
+        <div class="music-group">
+            <span class="badge-music">🎵 BÀI HÁT:</span>
+            <button id="btn-play-song1" class="btn music-btn active" onclick="playMusic('../../audio/vocal_song_pop.mp3', 'Pop Singer Live Performance')">▶ Bài 1: Pop Vocal (Giọng Hát Thật)</button>
+            <button id="btn-play-song2" class="btn music-btn" onclick="playMusic('../../audio/jpop_anime_beat.mp3', 'Idol Dance Beat 130 BPM')">▶ Bài 2: K-Pop / J-Pop Dance</button>
+            <button id="btn-stop-song" class="btn stop-btn" onclick="stopMusic()">⏹ Dừng</button>
+        </div>
+
+        <div class="choreo-group">
+            <span class="badge-choreo">💃 VŨ ĐẠO:</span>
+            <button class="btn choreo-btn active" id="btn-choreo-1" onclick="switchChoreography('vocal')">🎙️ Hát Live Phiêu Lãng</button>
+            <button class="btn choreo-btn" id="btn-choreo-2" onclick="switchChoreography('dance')">⚡ Vũ Đạo Idol 130 BPM</button>
+            <button class="btn choreo-btn" id="btn-choreo-3" onclick="switchChoreography('climax')">🔥 Nốt Cao Trào (Climax)</button>
+        </div>
+
+        <div class="view-mode-group">
+            <button class="btn mode-btn active" id="mode-duo" onclick="switchStageMode('duo')">Song Ca (Cả 2)</button>
+            <button class="btn mode-btn" id="mode-realistic" onclick="switchStageMode('realistic')">Solo Realistic</button>
+            <button class="btn mode-btn" id="mode-anime" onclick="switchStageMode('anime')">Solo Anime Idol</button>
+        </div>
+    </div>
+
+    <!-- 3D Canvas Stage Viewport -->
+    <div id="stage-viewport">
+        <!-- Live HUD Overlay -->
+        <div class="stage-hud">
+            <div class="hud-item">
+                <span class="hud-label">Âm lượng giọng hát:</span>
+                <div class="meter-bar"><div class="meter-fill" id="vocal-meter"></div></div>
+                <span id="vocal-pct" class="hud-value">0%</span>
+            </div>
+            <div class="hud-item">
+                <span class="hud-label">Động tác biểu diễn:</span>
+                <span id="current-choreo-label" class="hud-value" style="color: #38bdf8;">01_Live_Pop_Vocal_Performance</span>
+            </div>
+            <div class="hud-item">
+                <span class="hud-label">Khẩu hình:</span>
+                <span id="current-viseme-label" class="hud-value" style="color: #ec4899;">Tự động phân tích</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Audio Player -->
+    <audio id="audio-engine" crossorigin="anonymous"></audio>
+
+    <script src="app.js"></script>
+</body>
+</html>
