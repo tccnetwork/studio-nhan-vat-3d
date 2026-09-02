@@ -433,13 +433,24 @@ def build_character(wanted_states=None, fast=False):
                                 actions=bpy.data.actions)
 
     print(">>> Xuất GLB" + ("" if fast else ", FBX, BLEND") + "...")
+    # Nén Draco: dữ liệu lưới chiếm 5,6 MB trong 9,66 MB, và đây là phần duy
+    # nhất nén được — texture đã là PNG, còn keyframe hoạt ảnh thì Draco không
+    # đụng tới. Lượng tử hoá để mức thận trọng: vị trí 14 bit, và generic 14 bit
+    # vì nhóm đó chứa cả trọng số skinning lẫn 57 morph target khuôn mặt.
     bpy.ops.export_scene.gltf(
         filepath=stem + ".glb",
         export_format='GLB',
         export_animations=True,
         export_nla_strips=True,
         export_morph=True,
-        export_skins=True
+        export_skins=True,
+        export_draco_mesh_compression_enable=True,
+        export_draco_mesh_compression_level=6,
+        export_draco_position_quantization=14,
+        export_draco_normal_quantization=10,
+        export_draco_texcoord_quantization=12,
+        export_draco_color_quantization=10,
+        export_draco_generic_quantization=14
     )
     if not fast:
         bpy.ops.export_scene.fbx(

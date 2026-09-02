@@ -1,5 +1,17 @@
 // Studio 3D cho nhân vật nữ ca sĩ anime idol.
 //
+// File này là ES module: index.html khai importmap trỏ "three" sang CDN.
+// Hàm nào được gọi từ thuộc tính onclick/oninput trong HTML đều phải gán vào
+// window ở cuối file, vì module có phạm vi riêng chứ không đổ ra toàn cục.
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+const DRACO_DECODER_PATH =
+    'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/draco/gltf/';
+
+//
 // Danh sách trạng thái, kiểu tóc và nhóm vật liệu không nằm trong file này.
 // Chúng đến từ build/manifest.json do quy trình dựng sinh ra từ
 // scripts/catalog.py, nên thêm một trạng thái chỉ cần sửa một chỗ duy nhất.
@@ -99,7 +111,7 @@ function init() {
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.35;
     } catch(err) {
@@ -108,7 +120,7 @@ function init() {
         return;
     }
 
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.maxPolarAngle = Math.PI / 2 + 0.02;
@@ -212,20 +224,33 @@ function stateButtonId(clip) {
 }
 
 function setupLighting() {
-    scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+    // Từ r155 three.js tính ánh sáng theo đơn vị vật lý: hệ số PI trước đây
+    // nhân ngầm vào cường độ đã bị bỏ, nên cùng một con số cho ra cảnh tối hơn
+    // khoảng 3,14 lần. Hướng dẫn chuyển đổi chính thức là nhân cường độ với PI.
+    const L = Math.PI;
+    // Riêng đèn spot còn đổi cả cách suy giảm theo khoảng cách, nên chỉ nhân PI
+    // là chưa đủ: sàn sân khấu cách đèn khoảng 4 m vẫn tối hơn hẳn bản cũ.
+    // Hệ số này căn theo ảnh chụp đối chiếu chứ không suy ra từ công thức.
+    const SPOT = L * 3.0;
 
-    const frontLight = new THREE.DirectionalLight(0xfff8f0, 2.0);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.6 * L));
+
+    const frontLight = new THREE.DirectionalLight(0xfff8f0, 2.0 * L);
     frontLight.position.set(0, 3.0, 3.0);
     frontLight.castShadow = true;
     scene.add(frontLight);
 
-    const spotPink = new THREE.SpotLight(0xec4899, 3.2, 14, Math.PI / 4, 0.3);
+    // Từ r155 three.js đổi sang đèn theo đơn vị vật lý và decay mặc định là 2;
+    // r128 dùng decay 1. Đặt lại 1 để ánh sáng sân khấu giữ nguyên như cũ.
+    const spotPink = new THREE.SpotLight(0xec4899, 3.2 * SPOT, 14, Math.PI / 4, 0.3);
+    spotPink.decay = 1;
     spotPink.position.set(-2, 4.0, 2.0);
     spotPink.target.position.set(0, 1.1, 0);
     scene.add(spotPink);
     scene.add(spotPink.target);
 
-    const spotPurple = new THREE.SpotLight(0xa855f7, 3.2, 14, Math.PI / 4, 0.3);
+    const spotPurple = new THREE.SpotLight(0xa855f7, 3.2 * SPOT, 14, Math.PI / 4, 0.3);
+    spotPurple.decay = 1;
     spotPurple.position.set(2, 4.0, 2.0);
     spotPurple.target.position.set(0, 1.1, 0);
     scene.add(spotPurple);
@@ -234,10 +259,14 @@ function setupLighting() {
 
 function setupStage() {
     const stageGeo = new THREE.CylinderGeometry(2.0, 2.1, 0.1, 64);
+    // metalness 0,8 mà không có environment map thì đúng ra phải ra gần như đen:
+    // bề mặt kim loại chỉ phản chiếu môi trường chứ hầu như không có phản xạ
+    // khuếch tán. r128 chưa tính đúng nên sàn vẫn sáng; r180 thì tối hẳn.
+    // Hạ metalness để sàn bắt được ánh đèn spot đúng như thiết kế ban đầu.
     const stageMat = new THREE.MeshStandardMaterial({
         color: 0x2e1045,
-        roughness: 0.2,
-        metalness: 0.8
+        roughness: 0.35,
+        metalness: 0.25
     });
     const stageMesh = new THREE.Mesh(stageGeo, stageMat);
     stageMesh.position.y = 0.05;
@@ -312,7 +341,11 @@ function loadModel(path) {
         }
     }
 
-    const loader = new THREE.GLTFLoader();
+    const loader = new GLTFLoader();
+    // Lưới trong GLB được nén Draco lúc xuất; bộ giải nén nạp kèm three.js.
+    const draco = new DRACOLoader();
+    draco.setDecoderPath(DRACO_DECODER_PATH);
+    loader.setDRACOLoader(draco);
     loader.load(path, (gltf) => {
         characterModel = gltf.scene;
 
@@ -968,3 +1001,16 @@ function animate() {
 }
 
 window.onload = init;
+
+// ==========================================
+// Hàm được gọi từ thuộc tính onclick/oninput trong index.html.
+// Module có phạm vi riêng nên phải gán tường minh vào window.
+// ==========================================
+Object.assign(window, {
+    setCameraView,
+    changeCharacterColor,
+    applyColorPreset,
+    randomizeCharacterStyle,
+    resetCharacterColors,
+    triggerManualWink,
+});

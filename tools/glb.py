@@ -62,6 +62,26 @@ def view_ids(accessor):
     return out
 
 
+def draco_view(primitive):
+    """bufferView chứa khối Draco của một primitive, hoặc None nếu không nén.
+
+    Khi lưới được nén Draco, các accessor của primitive không còn bufferView
+    riêng — dữ liệu nằm gọn trong một khối do extension trỏ tới. Công cụ nào
+    chỉ đi theo accessor sẽ bỏ sót toàn bộ hình học.
+    """
+    ext = primitive.get('extensions', {}).get('KHR_draco_mesh_compression')
+    return ext['bufferView'] if ext else None
+
+
+def mesh_views(mesh):
+    """Mọi bufferView mà một mesh dùng qua đường Draco."""
+    return [v for v in (draco_view(p) for p in mesh['primitives']) if v is not None]
+
+
+def is_draco(gltf):
+    return 'KHR_draco_mesh_compression' in gltf.get('extensionsUsed', [])
+
+
 def accessor_ids(mesh):
     """Mọi accessor mà một mesh tham chiếu."""
     out = []

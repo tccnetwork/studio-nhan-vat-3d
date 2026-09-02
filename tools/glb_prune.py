@@ -146,6 +146,10 @@ def prune(src, dst, drop_patterns, drop_all_anims=False, keep_anims=None):
     keep_views = set()
     for acc in new_accs:
         keep_views.update(glb.view_ids(acc))
+    # Lưới nén Draco giữ hình học trong một khối riêng mà accessor không trỏ
+    # tới. Bỏ sót nó là cắt mất chính phần dữ liệu cần giữ.
+    for m in new_meshes:
+        keep_views.update(glb.mesh_views(m))
     for im in gltf.get('images', []):
         if 'bufferView' in im:
             keep_views.add(im['bufferView'])
@@ -180,6 +184,11 @@ def prune(src, dst, drop_patterns, drop_all_anims=False, keep_anims=None):
     for im in gltf.get('images', []):
         if 'bufferView' in im:
             im['bufferView'] = view_map[im['bufferView']]
+    for m in new_meshes:
+        for prim in m['primitives']:
+            ext = prim.get('extensions', {}).get('KHR_draco_mesh_compression')
+            if ext:
+                ext['bufferView'] = view_map[ext['bufferView']]
     gltf['bufferViews'] = new_views
     gltf['buffers'] = [{'byteLength': len(new_blob)}]
 

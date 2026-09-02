@@ -6,7 +6,8 @@ hoạt ảnh, 57 blendshape khuôn mặt và một trình xem chạy thẳng tr�
 ```
 source/     Model nguồn — CHỈ ĐỌC. Không script nào được ghi vào đây.
 build/      Kết quả dựng (glb / fbx / blend / manifest.json). Dựng lại là có.
-web/        Trình xem 3D — bản duy nhất, tự sinh giao diện từ manifest.
+web/        Trình xem 3D — three.js r180 dạng ES module, tự sinh giao diện
+            từ manifest, giải nén Draco khi tải model.
 scripts/    catalog.py là danh mục gốc; build_character.py điều phối;
             states/ mỗi trạng thái một file; rig.py và hairstyles.py dùng chung.
 tools/      Tiện ích thao tác GLB, không cần Blender.
@@ -109,11 +110,24 @@ Ba nút vặn ở cuối `scripts/hairstyles.py`: `hang` (xoè hay rơi thẳng)
 trạng thái, kể cả hai trạng thái đi bộ, đều là keyframe quaternion viết tay.
 Đây là việc chính của Giai đoạn 2.
 
-**three.js r128 phát hành năm 2021.** Chặn đường dùng nén meshopt và hệ quản
-lý màu mới.
-
 **Khẩu hình chưa bám lời hát.** Miệng xoay vòng nguyên âm theo đồng hồ chứ
 không theo âm vị, dù trình xem đã có phân tích FFT thật.
+
+## Ghi chú về trình xem
+
+`web/app.js` là **ES module**; `web/index.html` khai importmap trỏ `three` sang
+CDN. Hàm nào được gọi từ thuộc tính `onclick` hay `oninput` trong HTML đều phải
+gán vào `window` ở cuối `app.js` — module có phạm vi riêng, không đổ ra toàn cục.
+
+Hai cái bẫy khi chuyển từ r128 lên r180, cả hai đều không báo lỗi mà chỉ làm
+hình sai:
+
+* **Đơn vị ánh sáng.** Từ r155, hệ số PI nhân ngầm vào cường độ đã bị bỏ, nên
+  giữ nguyên con số cũ thì cảnh tối đi khoảng 3,14 lần. Đèn spot còn đổi cả
+  công thức suy giảm theo khoảng cách nên cần hệ số riêng.
+* **Vật liệu kim loại.** Sàn sân khấu đặt `metalness: 0.8` mà cảnh không có
+  environment map: r128 vẫn vẽ sáng, r180 tính đúng nên ra gần như đen. Đã hạ
+  metalness thay vì thêm environment map, để không đổi cách nhân vật bắt sáng.
 
 ## Thử nghiệm hình dạng tóc
 

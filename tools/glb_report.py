@@ -21,7 +21,8 @@ def report(path):
         return sum(views[v]['byteLength'] for v in glb.view_ids(accs[acc_id]))
 
     print(f'\n=== {path} ===')
-    print(f'File trên đĩa : {glb.mb(os.path.getsize(path))}')
+    print(f'File trên đĩa : {glb.mb(os.path.getsize(path))}'
+          + ('   [nén Draco]' if glb.is_draco(gltf) else ''))
     print(f'Chunk BIN     : {glb.mb(len(blob))}')
 
     anims = gltf.get('animations', [])
@@ -39,7 +40,8 @@ def report(path):
     print(f'\nLưới ({len(gltf.get("meshes", []))})')
     for i, m in enumerate(gltf.get('meshes', [])):
         verts = sum(accs[p['attributes']['POSITION']]['count'] for p in m['primitives'])
-        nbytes = sum(size_of(a) for a in set(glb.accessor_ids(m)))
+        nbytes = (sum(size_of(a) for a in set(glb.accessor_ids(m)))
+                  + sum(views[v]['byteLength'] for v in glb.mesh_views(m)))
         morphs = len(m['primitives'][0].get('targets', []))
         names = ', '.join(node_of_mesh.get(i, ['(không gắn node)']))
         print(f'  {names:32s} {verts:7d} đỉnh  {morphs:3d} morph  {glb.mb(nbytes):>9s}')
@@ -55,6 +57,8 @@ def report(path):
         cat = 'Tóc' if 'Hair' in names else 'Thân + mặt'
         for a in set(glb.accessor_ids(m)):
             add(cat, size_of(a))
+        for v in glb.mesh_views(m):
+            add(cat, views[v]['byteLength'])
     for a in anims:
         for s in a['samplers']:
             add('Hoạt ảnh', size_of(s['input']) + size_of(s['output']))
