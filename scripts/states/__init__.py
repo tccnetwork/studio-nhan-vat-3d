@@ -25,6 +25,7 @@ ORDER = [
     ('16_VayTay_Mocap', 's16_VayTay_Mocap'),
     ('17_NhayMua_Mocap', 's17_NhayMua_Mocap'),
     ('18_DanChuyen_Mocap', 's18_DanChuyen_Mocap'),
+    ('19_NhayMuaDai_Mocap', 's19_NhayMuaDai_Mocap'),
 ]
 
 

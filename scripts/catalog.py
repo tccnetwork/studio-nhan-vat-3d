@@ -48,6 +48,8 @@ STATES = [
          label='Vũ Đạo (Mocap)',     desc='Một đoạn vũ đạo retarget từ mocap'),
     dict(clip='18_DanChuyen_Mocap',  order=18, icon='🗣️', accent='#818cf8',
          label='Dẫn Chuyện (Mocap)', desc='Cử chỉ dẫn chuyện, retarget từ mocap'),
+    dict(clip='19_NhayMuaDai_Mocap', order=19, icon='🕺', accent='#f43f5e',
+         label='Vũ Đạo Dài (Mocap)', desc='Vũ đạo dài, cắt theo chu kỳ chuyển động'),
 ]
 
 # Không có clip khuôn mặt: biểu cảm do trình xem điều khiển lúc chạy, xem chú

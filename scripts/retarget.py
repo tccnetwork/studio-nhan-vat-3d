@@ -240,6 +240,86 @@ def find_loop_length(bvh_arm, first, lo=16, hi=90):
     return best
 
 
+def find_dance_loop(bvh_arm, first, last, window=720, lag_lo=30, lag_hi=220, step=2):
+    """Tìm chu kỳ của một đoạn vũ đạo dài, rồi chọn chỗ bắt đầu khép nhất.
+
+    find_loop_length dò từng độ dài từ một điểm bắt đầu cố định — hợp với đoạn
+    ngắn, nhưng với bản ghi bốn nghìn frame thì điểm bắt đầu mới là thứ quyết
+    định. Ở đây làm hai bước:
+
+      1. Lấy mẫu hướng khớp trên một cửa sổ dài rồi tự tương quan để tìm chu kỳ
+         thật của điệu nhảy.
+      2. Với chu kỳ đó, quét các chỗ bắt đầu và chọn chỗ có sai lệch nhỏ nhất.
+
+    Trả về (frame bắt đầu, số frame).
+    """
+    scene = bpy.context.scene
+    end = min(last - 1, first + window)
+    frames = list(range(first, end, step))
+    feats = []
+    for f in frames:
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        v = []
+        for src, src_child, _d, _dc in BONE_MAP:
+            d = _joint_dir(bvh_arm, src, src_child) or Vector((0, 0, 1))
+            v += [d.x, d.y, d.z]
+        feats.append(v)
+    n = len(feats)
+    if n < 8:
+        return first, lag_lo
+
+    def dist(i, j):
+        a, b = feats[i], feats[j]
+        return sum((x - y) * (x - y) for x, y in zip(a, b))
+
+    # --- bước 1: chu kỳ ---
+    # Không lấy cực tiểu toàn cục: khoảng cách giữa hai tư thế tăng dần theo độ
+    # trễ, nên cực tiểu toàn cục luôn rơi vào độ trễ nhỏ nhất bất kể điệu nhảy
+    # có chu kỳ bao nhiêu. Chu kỳ thật là chỗ đường cong **trũng xuống so với
+    # nền quanh nó**, nên phải chuẩn hoá theo nền rồi mới tìm cực tiểu cục bộ.
+    lo_i = max(1, lag_lo // step)
+    hi_i = min(lag_hi // step, n - 4)
+    lags = list(range(lo_i, hi_i))
+    if len(lags) < 5:
+        return frames[0], lag_lo
+    scores = []
+    for lag in lags:
+        pairs = n - lag
+        scores.append(sum(dist(i, i + lag) for i in range(pairs)) / pairs)
+
+    half = max(2, len(lags) // 8)
+    ratios = []
+    for k in range(len(lags)):
+        a, b = max(0, k - half), min(len(lags), k + half + 1)
+        base = sum(scores[a:b]) / (b - a)
+        ratios.append(scores[k] / base if base > 1e-9 else 1.0)
+
+    best_k, best_ratio = None, None
+    for k in range(1, len(lags) - 1):
+        if ratios[k] > ratios[k - 1] or ratios[k] > ratios[k + 1]:
+            continue                      # không phải đáy
+        if best_ratio is None or ratios[k] < best_ratio:
+            best_k, best_ratio = k, ratios[k]
+    if best_k is None:
+        best_k, best_ratio = min(range(len(lags)), key=lambda k: ratios[k]), min(ratios)
+    best_lag = lags[best_k]
+    best_score = scores[best_k]
+    period = best_lag * step
+    print(f'    độ trũng của chu kỳ so với nền: {best_ratio:.2f} '
+          f'(1,00 nghĩa là không có chu kỳ nào nổi lên)')
+
+    # --- bước 2: chỗ bắt đầu ---
+    best_start, best_err = frames[0], None
+    for i in range(0, n - best_lag):
+        err = dist(i, i + best_lag)
+        if best_err is None or err < best_err:
+            best_start, best_err = frames[i], err
+    print(f'    chu kỳ điệu nhảy: {period} frame; bắt đầu ở frame {best_start} '
+          f'(sai lệch {best_err:.3f} so với trung bình {best_score:.3f})')
+    return best_start, period
+
+
 def retarget(char_arm, bvh_arm, clip_name, frames=None,
              in_place=True, ground=True, scale=None, lock=True):
     """Bake một action mới trên char_arm từ chuyển động của bvh_arm.
@@ -385,7 +465,7 @@ def close_loop(char_arm, act, n_frames, blend=6):
 
 
 def mocap_state(clip_name, bvh_file, offset=0, loop_lo=20, loop_hi=90,
-                in_place=True, blend=0):
+                in_place=True, blend=0, dance=False):
     """Trả về hàm bake cho một trạng thái lấy chuyển động từ file BVH.
 
     offset : bỏ qua bấy nhiêu frame đầu. Các bản ghi dài thường mở đầu bằng
@@ -395,9 +475,13 @@ def mocap_state(clip_name, bvh_file, offset=0, loop_lo=20, loop_hi=90,
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         bvh_arm, first, last = load_bvh(os.path.join(root, 'mocap', bvh_file))
         try:
-            start = min(first + offset, last - loop_lo - 1)
-            hi = min(loop_hi, last - start - 1)
-            span = find_loop_length(bvh_arm, start, lo=loop_lo, hi=hi)
+            if dance:
+                start, span = find_dance_loop(bvh_arm, first + offset, last,
+                                              lag_lo=loop_lo, lag_hi=loop_hi)
+            else:
+                start = min(first + offset, last - loop_lo - 1)
+                hi = min(loop_hi, last - start - 1)
+                span = find_loop_length(bvh_arm, start, lo=loop_lo, hi=hi)
             # Thứ tự quan trọng: làm khép vòng trước rồi mới khoá bàn chân.
             # Làm ngược lại thì phép hoà đuôi clip sẽ nhấc chân khỏi sàn ở đúng
             # mấy frame vừa được chỉnh cho chạm sàn.

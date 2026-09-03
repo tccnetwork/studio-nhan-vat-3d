@@ -1,8 +1,8 @@
 # Studio Ca Sĩ 3D
 
-Nhân vật nữ ca sĩ anime idol dựng trên nền VRoid Studio, kèm 18 trạng thái
-hoạt ảnh (4 trong đó retarget từ mocap thật), 57 blendshape khuôn mặt và một
-trình xem chạy thẳng trên trình duyệt.
+Nhân vật nữ ca sĩ anime idol dựng trên nền VRoid Studio, kèm 19 trạng thái
+hoạt ảnh (5 trong đó retarget từ mocap thật), 57 blendshape khuôn mặt, một
+trình xem chạy thẳng trên trình duyệt và một bản nhúng được vào trang khác.
 
 ```
 source/     Model nguồn — CHỈ ĐỌC. Không script nào được ghi vào đây.
@@ -31,7 +31,7 @@ open http://localhost:8080/web/
 ```bash
 BL=/Applications/Blender.app/Contents/MacOS/Blender
 
-# đầy đủ 14 trạng thái, xuất glb + fbx + blend + manifest  (~10 phút)
+# đầy đủ 19 trạng thái, xuất glb + fbx + blend + manifest  (~70 giây)
 $BL --background --factory-startup --python scripts/build_character.py
 
 # một trạng thái, chỉ xuất glb, ghi vào build/preview/       (~37 giây)
@@ -42,9 +42,12 @@ $BL --background --factory-startup --python scripts/build_character.py -- \
 $BL --background --factory-startup --python scripts/build_character.py -- --list
 ```
 
-Bake trạng thái chiếm khoảng 7 phút trong tổng 10 phút, nên `--states` là cách
-duy nhất để thử đi thử lại một tư thế mà không mất cả buổi. Bản dựng thiếu
-trạng thái luôn ghi vào `build/preview/`, không bao giờ đè lên bản chính thức.
+Bản dựng thiếu trạng thái luôn ghi vào `build/preview/`, không bao giờ đè lên
+bản chính thức.
+
+Lượt dựng đầy đủ từng mất khoảng mười phút. Phần lớn thời gian đó là ghi
+keyframe cho 59 xương tóc ở **mỗi frame của mỗi trạng thái**; từ khi tóc chuyển
+sang mô phỏng lúc chạy thì chỉ còn khoảng bảy mươi giây.
 
 Script đọc `source/female_singer_anime_idol_base.glb`, dựng kiểu tóc và 14
 trạng thái, rồi ghi ra `build/`. Nó **không bao giờ** ghi vào `source/` — có
