@@ -24,7 +24,7 @@ Nên phép biến đổi chỉ còn một hệ số tỉ lệ, không có phép 
 import bpy
 import math
 import os
-from mathutils import Vector
+from mathutils import Quaternion, Vector
 
 # Hướng của một xương phải đo bằng vector từ khớp này tới **khớp con**, không
 # phải bằng tail - head. glTF không lưu chiều dài xương nên khi nhập vào Blender,
@@ -209,6 +209,95 @@ def lock_feet(char_arm, act, frames, contact_band=0.03):
                     data_path='rotation_quaternion', frame=f)
             fixed += 1
     print(f'    khoá bàn chân: chỉnh {fixed} lượt chân-frame về đúng mặt sàn')
+
+
+def level_feet(char_arm, act, frames, max_roll_deg=14.0):
+    """San bằng độ LẬT của bàn chân quanh chính trục dọc của nó.
+
+    Vì sao cần: _aim() xoay một xương bằng phép quay cung ngắn nhất tới hướng
+    đích. Phép đó khoá được hướng, tức 2 trong 3 bậc tự do, còn góc xoay quanh
+    chính hướng ấy thì bỏ trống — nó thừa hưởng độ xoắn tích luỹ dọc chuỗi
+    xương. Với bàn chân, hậu quả là lòng bàn chân quay ngang hoặc ngửa hẳn lên.
+
+    Đo trên bản dựng trước khi có bước này: clip vũ đạo lật tới 180°, clip vũ
+    đạo dài lật quá 45° ở 231 trong 362 lượt chân-frame. Trong khi các clip
+    làm tay chỉ lật 3–10° và tư thế T đúng 0°.
+
+    Cách sửa: xoay bàn chân quanh trục nối cổ chân với mũi chân. Trục đó đi qua
+    cả hai khớp nên mũi chân KHÔNG dịch chuyển — bước này không phá vị trí chân
+    mà lock_feet vừa đặt. Còn lại một chút lật (max_roll_deg) vì chân xoay ra
+    ngoài đôi chút là chuyện tự nhiên; các clip làm tay cũng nằm trong khoảng ấy.
+    """
+    scene = bpy.context.scene
+    first, last = frames
+    up = Vector((0.0, 0.0, 1.0))            # Blender dựng trục Z lên trời
+    limit = math.radians(max_roll_deg)
+
+    # Trục cục bộ nào của bàn chân trỏ lên trời ở tư thế nghỉ. Lấy từ xương
+    # gốc (edit bone) nên độc lập với tư thế đang đặt.
+    rest_up = {}
+    for side in ('L', 'R'):
+        _, _, foot, _ = LEG_CHAIN[side]
+        eb = char_arm.data.bones.get(foot)
+        if eb is None:
+            continue
+        r0 = (char_arm.matrix_world @ eb.matrix_local).to_3x3()
+        rest_up[side] = r0.inverted() @ up
+
+    worst_before = 0.0
+    worst_after = 0.0
+    touched = 0
+    for f in range(first, last + 1):
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        for side in ('L', 'R'):
+            if side not in rest_up:
+                continue
+            _, _, foot, toe = LEG_CHAIN[side]
+            pf = char_arm.pose.bones.get(foot)
+            pt = char_arm.pose.bones.get(toe)
+            if pf is None or pt is None:
+                continue
+            fwd = (char_arm.matrix_world @ pt.head) - (char_arm.matrix_world @ pf.head)
+            if fwd.length < 1e-6:
+                continue
+            fwd.normalize()
+            normal = (char_arm.matrix_world @ pf.matrix).to_3x3() @ rest_up[side]
+            # Chiếu cả pháp tuyến lòng bàn chân lẫn mốc so sánh lên mặt phẳng
+            # vuông góc trục dọc. Thiếu bước chiếu thì độ chúc mũi chân lọt vào
+            # kết quả và ngay cả tư thế T cũng báo lật 30°.
+            nv = normal - fwd * normal.dot(fwd)
+            rv = up - fwd * up.dot(fwd)
+            if nv.length < 1e-4 or rv.length < 1e-4:
+                continue                    # bàn chân dựng thẳng đứng, không định nghĩa
+            nv.normalize()
+            rv.normalize()
+            roll = nv.angle(rv, 0.0)
+            # Dấu của góc lật: lấy theo chiều trục dọc.
+            if nv.cross(rv).dot(fwd) < 0:
+                roll = -roll
+            worst_before = max(worst_before, abs(roll))
+            # Chỉ gỡ phần vượt quá mức cho phép.
+            excess = 0.0
+            if roll > limit:
+                excess = roll - limit
+            elif roll < -limit:
+                excess = roll + limit
+            if abs(excess) < math.radians(0.5):
+                worst_after = max(worst_after, abs(roll))
+                continue
+            q = Quaternion(fwd, excess)
+            m = q.to_matrix().to_4x4() @ pf.matrix
+            m.translation = pf.matrix.translation
+            pf.matrix = m
+            bpy.context.view_layer.update()
+            pf.keyframe_insert(data_path='rotation_quaternion', frame=f)
+            touched += 1
+            worst_after = max(worst_after, abs(roll - excess))
+
+    print(f'    san lật bàn chân: sửa {touched} lượt chân-frame, '
+          f'lật lớn nhất {math.degrees(worst_before):.0f}° '
+          f'-> {math.degrees(worst_after):.0f}°')
 
 
 def find_loop_length(bvh_arm, first, lo=16, hi=90):
@@ -427,6 +516,7 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
 
     if ground and lock:
         lock_feet(char_arm, act, (1, out_frame))
+        level_feet(char_arm, act, (1, out_frame))
 
     print(f'    đã bake {out_frame} frame vào "{clip_name}"')
     return act
@@ -491,6 +581,7 @@ def mocap_state(clip_name, bvh_file, offset=0, loop_lo=20, loop_hi=90,
             if blend:
                 close_loop(char_arm, act, span, blend=blend)
                 lock_feet(char_arm, act, (1, span))
+                level_feet(char_arm, act, (1, span))
         finally:
             discard_bvh(bvh_arm)
             bpy.context.view_layer.objects.active = char_arm
