@@ -439,6 +439,7 @@ def build_character(wanted_states=None, fast=False):
     print(f">>> DỰNG XONG -> {stem}.glb")
     if not partial:
         print(">>> Kiểm tra bằng: python3 tools/verify_build.py")
+        print(">>> Xuất VRM bằng: python3 tools/make_vrm.py")
 
 
 if __name__ == '__main__':

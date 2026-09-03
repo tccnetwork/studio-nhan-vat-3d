@@ -65,6 +65,7 @@ def write_manifest(path, model_file, source_file, frames_by_clip):
         'hairstyles': [dict(h) for h in catalog.HAIRSTYLES],
         'audioTracks': [dict(t) for t in catalog.AUDIO_TRACKS],
         'materialGroups': catalog.MATERIAL_GROUPS,
+        'hairColliders': [dict(c) for c in catalog.HAIR_COLLIDERS],
     }
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)

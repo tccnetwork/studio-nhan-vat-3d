@@ -123,7 +123,7 @@ export class Character {
         this.mixer.update(delta);
         if (!this._hairReady) {
             this.root.updateMatrixWorld(true);
-            this.hair.build(this.root);
+            this.hair.build(this.root, this.manifest.hairColliders || []);
             this._hairReady = true;
         }
         this.hair.update(delta);

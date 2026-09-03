@@ -111,6 +111,29 @@ Ba nút vặn ở cuối `scripts/hairstyles.py`: `hang` (xoè hay rơi thẳng)
 **Khẩu hình chưa bám lời hát.** Miệng xoay vòng nguyên âm theo đồng hồ chứ
 không theo âm vị, dù trình xem đã có phân tích FFT thật.
 
+## Xuất VRM
+
+```bash
+python3 tools/make_vrm.py            # -> build/female_singer_anime_idol.vrm
+```
+
+VRM là một extension của glTF chứ không phải định dạng riêng, nên việc cần làm
+là bổ sung khối `VRMC_vrm`: bộ xương người chuẩn, bảng biểu cảm, điểm nhìn, siêu
+dữ liệu bản quyền — cộng `VRMC_springBone` cho tóc động. Model gốc là VRoid nên
+tên xương đã theo đúng quy ước `J_Bip_*`, ánh xạ sang tên chuẩn VRM là một-một;
+mặt nhân vật hướng +Z, đúng yêu cầu VRM 1.0 (bản 0.x thì ngược lại).
+
+Hoạt ảnh bị lược bỏ vì VRM mô tả một nhân vật chứ không phải một đoạn diễn —
+6,43 MB xuống 4,49 MB. Thêm `--keep-animations` nếu muốn giữ.
+
+Kết quả đã kiểm chứng bằng chính thư viện `@pixiv/three-vrm`: nhận diện VRM 1.0,
+54 khớp xương người (15 khớp bắt buộc đều có), 14 biểu cảm chuẩn, 47 đốt tóc
+động, `lookAt` có, và `vrm.update()` chạy không lỗi sau khi đặt biểu cảm.
+
+Phần cho phép sử dụng trong `VRM_META` của `scripts/catalog.py` đang đặt **chặt
+nhất**: chỉ tác giả được dùng, không thương mại, không phân phối lại. Sửa ở đó
+nếu muốn mở rộng.
+
 ## Nhúng nhân vật vào trang khác
 
 ```html

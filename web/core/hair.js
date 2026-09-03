@@ -13,17 +13,8 @@ const _q1 = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _qi = new THREE.Quaternion();
 
-// Các quả cầu bọc thân người để tóc không xuyên qua. Toạ độ đặt trong hệ của
-// chính xương mang nó, nên chúng đi theo người khi nhân vật cử động.
-const COLLIDERS = [
-    { match: 'UpperChest', offset: [0, -0.010, 0.045], radius: 0.138 },
-    { match: 'UpperChest', offset: [0, -0.010, -0.040], radius: 0.135 },
-    { match: 'Spine', offset: [0, 0.010, 0.035], radius: 0.125 },
-    { match: 'Shoulder_L', offset: [0.040, 0, 0.015], radius: 0.098 },
-    { match: 'Shoulder_R', offset: [-0.040, 0, 0.015], radius: 0.098 },
-    { match: 'UpperArm_L', offset: [0, 0, 0], radius: 0.095 },
-    { match: 'UpperArm_R', offset: [0, 0, 0], radius: 0.105 },
-];
+// Bảng quả cầu va chạm đến từ manifest (scripts/catalog.py), không viết cứng
+// ở đây: tools/make_vrm.py cũng đọc đúng bảng đó khi ghi phần VRMC_springBone.
 
 export class HairPhysics {
     constructor(options = {}) {
@@ -37,8 +28,9 @@ export class HairPhysics {
         this._accum = 0;
     }
 
-    /** Tìm xương tóc và quả cầu va chạm trong model vừa nạp. */
-    build(model) {
+    /** Tìm xương tóc và quả cầu va chạm trong model vừa nạp.
+     *  colliderSpec lấy từ manifest.hairColliders. */
+    build(model, colliderSpec = []) {
         this.springs = [];
         this.colliders = [];
         const bones = new Map();
@@ -50,9 +42,8 @@ export class HairPhysics {
             if (n.toLowerCase().includes('hair') && n.includes('_Sec_')) hairBones.push(node);
         });
 
-        for (const c of COLLIDERS) {
-            const bone = [...bones.values()].find(b => b.name.includes(c.match)
-                || b.name.includes(c.match.replace(/^(\w+)_([LR])$/, '$2_$1')));
+        for (const c of colliderSpec) {
+            const bone = bones.get(c.bone);
             if (bone) {
                 this.colliders.push({
                     bone,

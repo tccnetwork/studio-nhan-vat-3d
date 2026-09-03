@@ -81,6 +81,39 @@ AUDIO_TRACKS = [
          icon='🎶', vocals=False),
 ]
 
+# Quả cầu bọc thân người để tóc không xuyên qua. Toạ độ đặt trong hệ của chính
+# xương mang nó nên chúng đi theo người khi nhân vật cử động. Bảng này chảy qua
+# manifest ra web/core/hair.js, và cũng được tools/make_vrm.py dùng để ghi phần
+# VRMC_springBone — một bảng, hai nơi đọc.
+HAIR_COLLIDERS = [
+    dict(bone='J_Bip_C_UpperChest', offset=[0, -0.010, 0.045], radius=0.138),
+    dict(bone='J_Bip_C_UpperChest', offset=[0, -0.010, -0.040], radius=0.135),
+    dict(bone='J_Bip_C_Spine',      offset=[0, 0.010, 0.035],  radius=0.125),
+    dict(bone='J_Bip_L_Shoulder',   offset=[0.040, 0, 0.015],  radius=0.098),
+    dict(bone='J_Bip_R_Shoulder',   offset=[-0.040, 0, 0.015], radius=0.098),
+    dict(bone='J_Bip_L_UpperArm',   offset=[0, 0, 0],          radius=0.095),
+    dict(bone='J_Bip_R_UpperArm',   offset=[0, 0, 0],          radius=0.105),
+]
+
+# Siêu dữ liệu ghi vào file VRM. Đây là phần pháp lý của định dạng: nó nói ai
+# được dùng avatar này và dùng vào việc gì. Mặc định đặt chặt nhất; sửa ở đây
+# nếu muốn cho phép rộng hơn.
+VRM_META = dict(
+    name='Nữ Ca Sĩ Anime Idol',
+    version='1.0',
+    authors=['Dự án Studio Ca Sĩ 3D'],
+    licenseUrl='https://vrm.dev/licenses/1.0/',
+    avatarPermission='onlyAuthor',
+    commercialUsage='personalNonProfit',
+    creditNotation='required',
+    allowExcessivelyViolentUsage=False,
+    allowExcessivelySexualUsage=False,
+    allowPoliticalOrReligiousUsage=False,
+    allowAntisocialOrHateUsage=False,
+    allowRedistribution=False,
+    modification='prohibited',
+)
+
 # Nhóm vật liệu cho bộ đổi màu trong trình xem
 MATERIAL_GROUPS = {
     'hair':    ['Hair_00_HAIR', 'HairBack_00_HAIR'],
