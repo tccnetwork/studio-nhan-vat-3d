@@ -189,7 +189,10 @@ export class Character {
                 if (key) guess = { key, openness: Math.min(1, Math.max(0.25, loud)) };
             } else if (loud > VOICE_ONSET) {
                 guess = classifyVowel(audio.spectrumDb, audio.sampleRate);
-                if (guess) guess.openness = Math.min(1, (loud - VOICE_ONSET) / 0.55);
+                // Có sàn 0,45: khẩu hình mở he hé thì người xem không nhận ra
+                // là đang hát. Đã có cổng lọc mức to chặn đoạn không có giọng
+                // nên mở rõ ở đây là an toàn.
+                if (guess) guess.openness = Math.min(1, 0.45 + (loud - VOICE_ONSET) / 0.45);
             }
         } else if (this.lyrics) {
             this.lyrics.push(0, delta);
@@ -203,7 +206,7 @@ export class Character {
             if (!mesh.morphTargetInfluences) continue;
             for (const key in this.visemes) {
                 const idx = this.morphIndices[key];
-                if (idx !== undefined) mesh.morphTargetInfluences[idx] = this.visemes[key] * 0.92;
+                if (idx !== undefined) mesh.morphTargetInfluences[idx] = this.visemes[key];
             }
         }
     }

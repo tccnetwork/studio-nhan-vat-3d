@@ -573,8 +573,19 @@ function updateFacialAnimation(delta) {
     }
 
     const smileVal = smileState.currentIntensity;
-    const mouthJoyVal = smileVal * 0.85;
-    const mouthUpVal = smileVal * 0.45;
+    // Morph cười giữ miệng ở một hình cố định khá mạnh (đo được 0,55–0,65 suốt
+    // bài) và nuốt mất các khẩu hình nguyên âm — nhìn vào chỉ thấy cười chứ
+    // không thấy hát. Nhả bớt cười Ở MIỆNG theo đúng mức miệng đang mở, còn
+    // mắt và mày vẫn cười nguyên để gương mặt không bị lạnh.
+    let singing = 0;
+    if (character && character.visemes) {
+        for (const k in character.visemes) {
+            if (character.visemes[k] > singing) singing = character.visemes[k];
+        }
+    }
+    const mouthDamp = 1 - 0.8 * singing;
+    const mouthJoyVal = smileVal * 0.85 * mouthDamp;
+    const mouthUpVal = smileVal * 0.45 * mouthDamp;
     const eyeJoyVal = smileVal * 0.40;
     const brwJoyVal = smileVal * 0.30;
     const allJoyVal = smileVal * 0.35;

@@ -55,14 +55,18 @@ export function parseLyrics(text) {
 
 export class LyricsDriver {
     constructor(text, {
-        onsetRise = 0.16,      // mức tăng coi là một âm tiết mới
+        onsetRise = 0.16,      // mức tăng so với nền gần nhất, coi là âm tiết mới
         minGap = 0.11,         // giây, hai âm tiết không thể sát hơn thế
         lineBreak = 0.9,       // giây im tiếng thì coi là hết câu
+        floorRise = 2.2,       // tốc độ nền bò lên, mỗi giây
+        maxHold = 0.55,        // giữ một khẩu hình lâu hơn thế thì tự sang chữ kế
     } = {}) {
         this.lines = parseLyrics(text);
         this.onsetRise = onsetRise;
         this.minGap = minGap;
         this.lineBreak = lineBreak;
+        this.floorRise = floorRise;
+        this.maxHold = maxHold;
         this.line = 0;
         this.syl = -1;
         this.vowel = null;
@@ -70,7 +74,13 @@ export class LyricsDriver {
         // sẽ từ chối âm tiết ĐẦU TIÊN, và cả câu lệch đi một chữ.
         this.since = 99;       // giây kể từ âm tiết gần nhất
         this.quiet = 0;        // giây đang im tiếng
-        this._prev = 0;
+        // Nền để đo cú tăng. Trước đây chỗ này so mức to của KHUNG NÀY với
+        // KHUNG TRƯỚC, cách nhau khoảng 16 ms — mà mức to đã bị làm trơn nên
+        // không bao giờ nhảy nổi 0,16 trong ngần ấy thời gian. Hậu quả đo được:
+        // cả bài chỉ bắt được đúng một âm tiết, miệng đứng nguyên chữ đầu tiên
+        // suốt 32 giây. Nền tụt ngay khi nhạc nhỏ lại và bò lên chậm, nên cú
+        // tăng được đo trên khoảng vài trăm mili giây, đúng độ dài một âm tiết.
+        this._floor = 0;
         this._sub = 0;         // vị trí trong nguyên âm đôi
     }
 
@@ -93,10 +103,17 @@ export class LyricsDriver {
             this.quiet = 0;
         }
 
-        const rise = level - this._prev;
-        this._prev = level;
-        if (rise > this.onsetRise && this.since > this.minGap && this.lines.length) {
+        if (level < this._floor) this._floor = level;
+        else this._floor += Math.min(1, this.floorRise * dt) * (level - this._floor);
+        const rise = level - this._floor;
+
+        // Hát liền hơi thì không có cú tăng nào rõ rệt. Giữ mãi một khẩu hình
+        // trông như bị đơ, nên quá maxHold mà vẫn đang có tiếng thì sang chữ kế.
+        const stuck = this.since > this.maxHold && level > 0.25;
+
+        if ((rise > this.onsetRise || stuck) && this.since > this.minGap && this.lines.length) {
             this.since = 0;
+            this._floor = level;
             const line = this.lines[this.line];
             this.syl++;
             if (this.syl >= line.syllables.length) {
@@ -119,6 +136,6 @@ export class LyricsDriver {
 
     reset() {
         this.line = 0; this.syl = -1; this.vowel = null;
-        this.since = 99; this.quiet = 0; this._prev = 0; this._sub = 0;
+        this.since = 99; this.quiet = 0; this._floor = 0; this._sub = 0;
     }
 }
