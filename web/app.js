@@ -21,6 +21,12 @@ const MANIFEST_URL = '../build/manifest.json';
 const BUILD_DIR = '../build/';
 const AUDIO_DIR = '../audio/';
 
+/** Đường dẫn tới một bản nhạc. Mỗi bài khai báo thư mục riêng trong
+ *  scripts/catalog.py, thiếu thì hiểu là audio/. */
+function trackUrl(track) {
+    return '../' + (track.dir || 'audio/') + track.file;
+}
+
 let manifest = null;
 let stateByClip = {};      // ten clip -> muc trong manifest
 
@@ -40,6 +46,7 @@ let audioContext = null, analyser = null, audioSource = null;
 let audioDataArray = null, audioSpectrumDb = null, audioElement = null;
 let currentTrack = { file: 'vocal_song_pop.mp3', vocals: true };
 let isAudioPlaying = false;
+let shownState = null;
 let currentVocalEnergy = 0;
 
 const container = document.getElementById('canvas-container');
@@ -267,7 +274,7 @@ function selectAudioTrack(track) {
     const wasPlaying = isAudioPlaying;
     if (audioElement) {
         audioElement.pause();
-        audioElement.src = AUDIO_DIR + track.file;
+        audioElement.src = trackUrl(track);
         if (wasPlaying) audioElement.play().catch(() => {});
     }
     updateLipSyncNote();
@@ -372,7 +379,7 @@ function setupStage() {
 }
 
 function setupAudioElement() {
-    audioElement = new Audio(AUDIO_DIR + currentTrack.file);
+    audioElement = new Audio(trackUrl(currentTrack));
     audioElement.crossOrigin = "anonymous";
     audioElement.loop = true;
 }
@@ -742,13 +749,9 @@ function updateAnimationHUD(clipName) {
     hud.innerHTML = `<span style="color: #ff4b8b;">Đang phát:</span> ${name}`;
 }
 
-window.switchAnimationState = function(clipName) {
-    if (!character) return;
-    if (!animationsMap[clipName]) {
-        console.warn('Không có clip', clipName, '— các clip có trong model:',
-                     Object.keys(animationsMap));
-        return;
-    }
+/** Tô sáng nút của trạng thái đang chạy. Tách riêng vì bộ dựng bài cũng đổi
+ *  trạng thái, mà nó gọi thẳng Character chứ không đi qua switchAnimationState. */
+function highlightState(clipName) {
     document.querySelectorAll('.state-btn').forEach(b => {
         b.classList.remove('active');
         b.style.background = 'transparent';
@@ -758,6 +761,31 @@ window.switchAnimationState = function(clipName) {
         btn.classList.add('active');
         const st = stateByClip[clipName];
         if (st) btn.style.background = hexToRgba(st.accent, 0.18);
+    }
+}
+
+/** Giao quyền chọn động tác cho bộ dựng bài. */
+function startDancing() {
+    if (!character) return;
+    const cb = document.getElementById('toggle-choreo');
+    if (cb && !cb.checked) return;
+    character.setChoreography(true);
+}
+
+window.switchAnimationState = function(clipName) {
+    if (!character) return;
+    if (!animationsMap[clipName]) {
+        console.warn('Không có clip', clipName, '— các clip có trong model:',
+                     Object.keys(animationsMap));
+        return;
+    }
+    highlightState(clipName);
+    // Người dùng tự chọn trạng thái thì nhường quyền cho họ: để bộ dựng bài
+    // chạy tiếp thì vài giây nữa nó lại đổi mất, tưởng nút bấm bị hỏng.
+    if (character.choreo.enabled) {
+        character.setChoreography(false);
+        const cb = document.getElementById('toggle-choreo');
+        if (cb) cb.checked = false;
     }
     // Character.setState lo phần hoà mềm và dừng hẳn clip cũ.
     if (!character.setState(clipName)) return;
@@ -881,8 +909,7 @@ function setupUIEventListeners() {
         const btn = document.getElementById('btn-toggle-audio');
         if (btn) btn.textContent = '⏸ Tắt Nhạc';
         songDrop.innerHTML = 'Đang phát: <b style="color:#e2e8f0">' + file.name + '</b>';
-        const dance = manifest.states.filter(s => s.dance);
-        if (dance.length) switchAnimationState(dance[0].clip);
+        startDancing();
     }
 
     async function useSong(file) {
@@ -954,6 +981,16 @@ function setupUIEventListeners() {
         }, 400);
     }
 
+    const cbChoreo = document.getElementById('toggle-choreo');
+    if (cbChoreo) cbChoreo.addEventListener('change', () => {
+        if (!character) return;
+        character.setChoreography(cbChoreo.checked);
+    });
+    const cbAlive = document.getElementById('toggle-alive');
+    if (cbAlive) cbAlive.addEventListener('change', () => {
+        if (character) character.alive.enabled = cbAlive.checked;
+    });
+
     const lyricsBox = document.getElementById('lyrics-box');
     const lyricsNote = document.getElementById('lyrics-note');
     if (lyricsBox) {
@@ -1015,6 +1052,23 @@ function animate() {
             };
         }
         character.update(delta, audio);
+
+        // Bộ dựng bài đổi trạng thái từ bên trong Character, nên giao diện phải
+        // tự soi lại chứ không được chờ ai gọi.
+        if (character.currentName !== shownState) {
+            shownState = character.currentName;
+            highlightState(shownState);
+        }
+        const note = document.getElementById('choreo-note');
+        if (note) {
+            note.textContent = character.choreo.enabled
+                ? (character.choreo.base
+                    ? `nền ${character.choreo.base.split('_')[0]} · tay `
+                      + (character.gesture ? character.gesture.split('_')[0] : 'nghỉ')
+                      + ` · phách ${character.choreo.beats}`
+                    : 'đang chờ dò ra nhịp bài hát…')
+                : '';
+        }
     }
 
     if (skeletonHelper && skeletonHelper.visible) {

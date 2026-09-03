@@ -76,9 +76,18 @@ HAIRSTYLES = [
 # rõ tuần hoàn p90 bằng nhau (0,68), độ nhô formant trung vị chênh 0,5 dB. Một
 # bộ dò rẻ tiền sẽ nhép miệng theo tiếng nhạc cụ. Nên trạng thái này được khai
 # báo tường minh thay vì suy đoán.
+# 'dir' là thư mục chứa file, tính từ gốc dự án; thiếu thì hiểu là 'audio/'.
+# Có lời hay không là điều KHAI BÁO chứ không đoán từ tín hiệu: người bỏ bài
+# vào biết rõ hơn mọi phép dò formant trên bản phối đã trộn nhạc cụ.
 AUDIO_TRACKS = [
-    dict(file='vocal_song_pop.mp3', label='Bài hát có lời',
-         icon='🎤', vocals=True, default=True),
+    dict(file='Hello_Ocean.mp3', dir='music/', label='Hello Ocean',
+         icon='🌊', vocals=True, default=True),
+    dict(file='Hello_Ocean_1.mp3', dir='music/', label='Hello Ocean (bản 2)',
+         icon='🌊', vocals=True),
+    dict(file='Pipo_Lets_Go.mp3', dir='music/', label='Pipo Let\'s Go',
+         icon='🚀', vocals=True),
+    dict(file='vocal_song_pop.mp3', label='Bài hát mẫu có lời',
+         icon='🎤', vocals=True),
     dict(file='jpop_anime_beat.mp3', label='Nhạc nền J-Pop',
          icon='🎶', vocals=False),
 ]

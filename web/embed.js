@@ -173,7 +173,7 @@ export async function createSinger(target, options = {}) {
         track = tracks.find(t => t.file === file) || tracks.find(t => t.default) || tracks[0];
         if (!track) return false;
         ensureGraph();
-        const url = new URL('audio/' + track.file, base).href;
+        const url = new URL((track.dir || 'audio/') + track.file, base).href;
         if (audioEl.src !== url) { audioEl.src = url; character.beat.reset(); }
         return true;
     }
@@ -292,13 +292,16 @@ export async function createSinger(target, options = {}) {
                 throw e;
             }
             playing = true;
-            if (dance) {
-                const d = character.danceStates;
-                if (d.length) character.setState(d[0]);
-            }
+            // Giao cho bộ dựng bài thay vì đóng đinh một clip: kho nền chỉ có
+            // vài clip nên lặp mãi một cái là lộ ngay ra là máy.
+            if (dance) character.setChoreography(true);
             return { name: track.file, vocals };
         },
         /** Nhịp đang dò được: { bpm, confidence, beatPhase }. */
+        /** Bật/tắt tự dựng bài nhảy theo nhạc. */
+        setChoreography(on) { return character.setChoreography(on); },
+        /** Bật/tắt lớp thở và dồn trọng tâm chạy bằng công thức. */
+        setAlive(on) { character.alive.enabled = !!on; return character.alive.enabled; },
         getBeat() {
             const b = character.beat;
             return { bpm: b.bpm, confidence: b.confidence, beatPhase: b.beatPhase,
