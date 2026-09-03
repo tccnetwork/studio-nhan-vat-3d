@@ -31,6 +31,8 @@
   <h1>Nhúng nhân vật vào một trang bất kỳ</h1>
   <p>Trang này không dùng gì của studio ngoài <code>web/embed.js</code>. Toàn bộ
      mã cần thiết nằm trong khối bên dưới.</p>
+  <p style="font-size:13px;color:#7e879b">Kéo chuột trong khung để xoay quanh
+     nhân vật · cuộn để phóng to thu nhỏ · chuột phải hoặc hai ngón để dịch.</p>
   <div id="slot"></div>
   <div class="row" id="states"></div>
   <div class="row" id="hairs"></div>
@@ -58,6 +60,7 @@ singer.audioTracks.forEach(t => mk(document.getElementById('audio'),
   `${t.icon} ${t.label}${t.vocals ? '' : ' (không nhép miệng)'}`,
   () => singer.playAudio(t.file)));
 mk(document.getElementById('audio'), '⏸ Dừng nhạc', () => singer.pauseAudio());
+mk(document.getElementById('audio'), '🎯 Về khung mặc định', () => singer.resetView());
 
 document.getElementById('code').textContent =
 `import { createSinger } from './web/embed.js';

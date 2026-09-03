@@ -167,6 +167,14 @@ Khung hình **tự tính từ hộp bao của model** và tính lại mỗi khi 
 thước, nên khung chủ nhà cao thấp rộng hẹp thế nào cũng thấy trọn nhân vật.
 Đặt `distance` nếu muốn tự quyết, `margin` để chừa nhiều hay ít quanh nhân vật.
 
+Trong khung, người xem **kéo chuột để xoay quanh nhân vật, cuộn để phóng to thu
+nhỏ, chuột phải hoặc hai ngón để dịch**. Từ lúc họ đụng vào, việc khung đổi kích
+thước sẽ không canh lại góc nhìn nữa — canh lại lúc đó là giật view ngay giữa
+khi họ đang xoay. Gọi `singer.resetView()` để đưa về khung mặc định.
+
+Tắt bằng `controls: false` cho một bản nhúng tĩnh, hoặc `zoom: false` /
+`pan: false` để chỉ cho xoay.
+
 **Trang studio và bản nhúng dùng chung `web/core/`** — vật lý tóc, bộ phân loại
 nguyên âm và phần nạp model chỉ có một cài đặt duy nhất.
 

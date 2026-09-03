@@ -68,6 +68,7 @@ export async function createSinger(target, options = {}) {
     character.setState(options.state ?? character.manifest.defaultState, 0);
     if (options.hairstyle) character.setHairstyle(options.hairstyle);
 
+    let userMoved = false;
     let controls = null;
     if (opts.controls) {
         controls = new OrbitControls(camera, renderer.domElement);
@@ -76,6 +77,12 @@ export async function createSinger(target, options = {}) {
         controls.maxPolarAngle = Math.PI / 2 + 0.02;
         controls.autoRotate = opts.autoRotate;
         controls.autoRotateSpeed = 1.2;
+        controls.enableZoom = options.zoom ?? true;
+        controls.enablePan = options.pan ?? true;
+        controls.minDistance = 0.4;
+        controls.maxDistance = 12;
+        // Người dùng đã tự đặt góc nhìn thì đừng kéo họ về chỗ cũ nữa.
+        controls.addEventListener('start', () => { userMoved = true; });
     }
     // Khung hình tính từ hộp bao thật thay vì đặt cứng khoảng cách: khung chủ
     // nhà cao thấp rộng hẹp thế nào cũng phải thấy trọn nhân vật.
@@ -135,8 +142,12 @@ export async function createSinger(target, options = {}) {
         renderer.setSize(w, h, false);
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
-        fitCamera();
-        if (controls) controls.update();
+        // Chỉ canh lại khung khi người dùng chưa đụng vào. Canh lại sau đó là
+        // giật view về chỗ cũ ngay giữa lúc họ đang xoay.
+        if (!userMoved) {
+            fitCamera();
+            if (controls) controls.update();
+        }
     }
     const ro = new ResizeObserver(resize);
     ro.observe(el);
@@ -173,6 +184,8 @@ export async function createSinger(target, options = {}) {
             return true;
         },
         pauseAudio() { if (audioEl) audioEl.pause(); playing = false; },
+        /** Đưa góc nhìn về khung mặc định. */
+        resetView() { userMoved = false; fitCamera(); if (controls) controls.update(); },
         destroy() {
             alive = false;
             ro.disconnect();
