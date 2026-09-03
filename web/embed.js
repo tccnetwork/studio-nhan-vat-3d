@@ -102,15 +102,37 @@ export async function createSinger(target, options = {}) {
     // ngang chỉ lấy một phần để không bị lùi ra quá xa.
     const shownWidth = Math.min(size.x, size.y * 0.55);
 
-    const PAN_LIMIT = 0.75;               // mét, tính từ tâm nhân vật
+    // Chốt tâm nhìn theo **tỉ lệ khung nhìn**, không theo một khoảng cách cố
+    // định trong không gian 3D. Phần nhìn thấy rộng bao nhiêu là do mức phóng
+    // to quyết định: ở khoảng cách nhỏ nhất (0,4 m) thì nửa bề rộng khung chỉ
+    // khoảng 0,3 m, nên một chốt cứng 0,75 m cho phép kéo nhân vật ra hẳn
+    // ngoài khung. Tính theo tỉ lệ thì mức phóng to nào cũng giữ được nhân vật
+    // trong khung.
+    const PAN_FRACTION = options.panFraction ?? 0.30;   // 0,30 = lệch nhiều nhất 30% nửa khung
+
+    function viewHalfExtent() {
+        const dist = camera.position.distanceTo(controls ? controls.target : lookAt);
+        const halfH = dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+        return { h: halfH, w: halfH * camera.aspect };
+    }
 
     function clampTarget() {
         if (!controls) return;
         const t = controls.target;
         const before = t.clone();
-        t.x = THREE.MathUtils.clamp(t.x, lookAt.x - PAN_LIMIT, lookAt.x + PAN_LIMIT);
-        t.y = THREE.MathUtils.clamp(t.y, lookAt.y - PAN_LIMIT, lookAt.y + PAN_LIMIT);
-        t.z = THREE.MathUtils.clamp(t.z, lookAt.z - PAN_LIMIT, lookAt.z + PAN_LIMIT);
+        const ext = viewHalfExtent();
+        const limX = ext.w * PAN_FRACTION;
+        const limY = ext.h * PAN_FRACTION;
+        // Kéo ngang trong mặt phẳng màn hình có thể rơi vào cả X lẫn Z tuỳ góc
+        // xoay, nên chặn theo khoảng cách nằm ngang chứ không chặn từng trục.
+        const dx = t.x - lookAt.x, dz = t.z - lookAt.z;
+        const flat = Math.hypot(dx, dz);
+        if (flat > limX && flat > 1e-6) {
+            const k = limX / flat;
+            t.x = lookAt.x + dx * k;
+            t.z = lookAt.z + dz * k;
+        }
+        t.y = THREE.MathUtils.clamp(t.y, lookAt.y - limY, lookAt.y + limY);
         // Dời camera đúng bằng phần vừa cắt, nếu không góc nhìn sẽ bị xoay lệch.
         camera.position.add(t.clone().sub(before));
     }

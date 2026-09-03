@@ -175,9 +175,13 @@ Trong khung có hai kiểu kéo, đổi bằng `singer.setDragMode(...)` hoặc 
 | `'xoay'` (mặc định) | xoay quanh nhân vật | dời nhân vật |
 | `'dichuyen'` | **dời nhân vật** trong khung | xoay |
 
-Cuộn chuột để phóng to thu nhỏ, giới hạn 0,4 – 12 m. Tâm nhìn bị **chốt trong
-bán kính 0,75 m quanh nhân vật**, nên một cú kéo hụt không làm mất dấu nhân vật
-— thiếu chốt này thì kéo mạnh một cái là nó ra hẳn ngoài mép khung.
+Cuộn chuột để phóng to thu nhỏ, giới hạn 0,4 – 12 m. Tâm nhìn bị chốt để nhân
+vật không trôi khỏi khung, và chốt đó tính theo **tỉ lệ khung nhìn** chứ không
+theo một khoảng cách cố định trong không gian 3D: phần nhìn thấy rộng bao nhiêu
+là do mức phóng to quyết định, nên một chốt cứng tính bằng mét sẽ quá chặt khi
+thu nhỏ và quá lỏng khi phóng to — ở khoảng cách nhỏ nhất, nửa bề rộng khung
+chỉ khoảng 0,3 m. Sửa mức cho phép bằng `panFraction` (mặc định 0,30, tức lệch
+nhiều nhất 30% nửa khung).
 
 Từ lúc người xem đụng vào, việc khung đổi kích thước không canh lại góc nhìn
 nữa — canh lại lúc đó là giật view ngay giữa khi họ đang xoay.
