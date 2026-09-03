@@ -232,7 +232,56 @@ def _signed_roll(fwd, normal, ref):
     return -a if nv.cross(rv).dot(fwd) < 0 else a
 
 
-def level_feet(char_arm, act, frames, max_ankle_deg=30.0):
+def _forward_sign(char_arm):
+    """Dấu để đường nối hai khớp háng cho ra hướng NHÌN chứ không phải hướng sau.
+
+    Không suy ra bằng cách lập luận về chiều tay của hệ trục: hệ của Blender và
+    hệ của glTF ngược tay nhau, tôi đã viết nhầm một lần và bộ dựng kẹp mũi chân
+    quanh đúng hướng ngược lại — đo ra mũi chân bị ép về sau 144°. Ở đây dấu
+    được hiệu chuẩn bằng chính tư thế nghỉ: lúc đứng nghỉ mũi chân chỉ về trước.
+    """
+    b = char_arm.data.bones
+    need = ('J_Bip_L_UpperLeg', 'J_Bip_R_UpperLeg',
+            'J_Bip_L_Foot', 'J_Bip_L_ToeBase', 'J_Bip_R_Foot', 'J_Bip_R_ToeBase')
+    if any(n not in b for n in need):
+        return None, None
+    mw = char_arm.matrix_world
+    hip = (mw @ b['J_Bip_R_UpperLeg'].head_local) - (mw @ b['J_Bip_L_UpperLeg'].head_local)
+    hip.z = 0.0
+    if hip.length < 1e-6:
+        return None, None
+    cand = hip.normalized().cross(Vector((0.0, 0.0, 1.0)))
+    if cand.length < 1e-6:
+        return None, None
+    cand.normalize()
+    toes = Vector((0.0, 0.0, 0.0))
+    for side in ('L', 'R'):
+        v = ((mw @ b['J_Bip_%s_ToeBase' % side].head_local)
+             - (mw @ b['J_Bip_%s_Foot' % side].head_local))
+        v.z = 0.0
+        if v.length > 1e-6:
+            toes += v.normalized()
+    if toes.length < 1e-6:
+        return None, None
+    return (1.0 if cand.dot(toes.normalized()) > 0 else -1.0), cand
+
+
+def _body_forward(char_arm, sign):
+    """Hướng nhìn của thân người trên mặt sàn, suy từ đường nối hai khớp háng."""
+    l = char_arm.pose.bones.get('J_Bip_L_UpperLeg')
+    r = char_arm.pose.bones.get('J_Bip_R_UpperLeg')
+    if l is None or r is None or sign is None:
+        return None
+    mw = char_arm.matrix_world
+    hip = (mw @ r.head) - (mw @ l.head)
+    hip.z = 0.0
+    if hip.length < 1e-6:
+        return None
+    return (hip.normalized().cross(Vector((0.0, 0.0, 1.0))) * sign).normalized()
+
+
+def level_feet(char_arm, act, frames, max_ankle_deg=30.0, max_yaw_deg=35.0,
+               min_flat=0.35):
     """Gỡ phần vặn cổ chân vượt quá giới hạn sinh lý.
 
     Vì sao cần: _aim() xoay một xương bằng phép quay cung ngắn nhất tới hướng
@@ -254,6 +303,18 @@ def level_feet(char_arm, act, frames, max_ankle_deg=30.0):
     Phép xoay đặt quanh trục nối cổ chân với mũi chân. Trục đó đi qua cả hai
     khớp nên mũi chân KHÔNG dịch chuyển — bước này không phá vị trí chân mà
     lock_feet vừa đặt, và cũng không đụng tới độ chúc mũi chân.
+
+    Bước thứ hai: kẹp góc MŨI CHÂN LỆCH so với hướng thân người. Đây là bậc tự
+    do còn lại mà phép nhắm hướng không khoá, và bản mocap để nó chạy loạn: đo
+    trên chính file BVH gốc, khi bước đi mũi chân đảo từ -15° tới -173°, tức là
+    chỉ ngược ra sau. Khớp cổ chân không làm được thế — gập bàn chân hết cỡ
+    khoảng 50° thì mũi chân vẫn còn chỉ về trước. Hai clip đi bộ dựng bằng tay
+    giữ trong khoảng -9°..+2° suốt chu kỳ.
+
+    Phép kẹp này xoay bàn chân quanh trục thẳng đứng đi qua cổ chân, nên chỉ
+    đổi hướng mũi chân, không đổi độ chúc. Bỏ qua những khung bàn chân dựng gần
+    thẳng đứng (min_flat): ở đó hướng mũi chân vừa không xác định rõ vừa không
+    nhìn ra được.
     """
     if not LEVEL_FEET:
         print('    san vặn cổ chân: BỎ QUA (NO_LEVEL_FEET=1)')
@@ -290,9 +351,55 @@ def level_feet(char_arm, act, frames, max_ankle_deg=30.0):
     worst_before = 0.0
     worst_after = 0.0
     touched = 0
+    yaw_before = 0.0
+    yaw_after = 0.0
+    yaw_touched = 0
+    yaw_limit = math.radians(max_yaw_deg)
+    fwd_sign, _ = _forward_sign(char_arm)
+    print(f'    hướng nhìn hiệu chuẩn từ tư thế nghỉ: dấu {fwd_sign}')
     for f in range(first, last + 1):
         scene.frame_set(f)
         bpy.context.view_layer.update()
+        body = _body_forward(char_arm, fwd_sign)
+
+        # --- bước 1: kẹp hướng mũi chân ---
+        for side in ('L', 'R'):
+            if side not in rest or body is None:
+                continue
+            _, _, foot, toe = LEG_CHAIN[side]
+            pf = char_arm.pose.bones.get(foot)
+            pt = char_arm.pose.bones.get(toe)
+            if pf is None or pt is None:
+                continue
+            mw = char_arm.matrix_world
+            ankle = mw @ pf.head
+            v = (mw @ pt.head) - ankle
+            flat = Vector((v.x, v.y, 0.0))
+            if v.length < 1e-6 or flat.length / v.length < min_flat:
+                continue                    # bàn chân dựng đứng, hướng không rõ
+            fwd = flat.normalized()
+            yaw = fwd.angle(body, 0.0)
+            if body.cross(fwd).z < 0:
+                yaw = -yaw
+            yaw_before = max(yaw_before, abs(yaw))
+            excess = 0.0
+            if yaw > yaw_limit:
+                excess = yaw - yaw_limit
+            elif yaw < -yaw_limit:
+                excess = yaw + yaw_limit
+            if abs(excess) < math.radians(0.5):
+                yaw_after = max(yaw_after, abs(yaw))
+                continue
+            q = Quaternion(Vector((0.0, 0.0, 1.0)), -excess)
+            m = q.to_matrix().to_4x4() @ pf.matrix
+            m.translation = pf.matrix.translation
+            pf.matrix = m
+            bpy.context.view_layer.update()
+            pf.keyframe_insert(data_path='rotation_quaternion', frame=f)
+            yaw_touched += 1
+            yaw_after = max(yaw_after, abs(yaw - excess))
+
+        # --- bước 2: kẹp góc vặn cổ chân ---
         for side in ('L', 'R'):
             if side not in rest:
                 continue
@@ -333,6 +440,9 @@ def level_feet(char_arm, act, frames, max_ankle_deg=30.0):
             touched += 1
             worst_after = max(worst_after, abs(roll - excess))
 
+    print(f'    kẹp hướng mũi chân: sửa {yaw_touched} lượt chân-frame, '
+          f'lệch lớn nhất {math.degrees(yaw_before):.0f}° '
+          f'-> {math.degrees(yaw_after):.0f}°')
     print(f'    san vặn cổ chân: sửa {touched} lượt chân-frame, '
           f'vặn lớn nhất {math.degrees(worst_before):.0f}° '
           f'-> {math.degrees(worst_after):.0f}°')

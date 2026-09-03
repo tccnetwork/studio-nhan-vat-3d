@@ -9,6 +9,11 @@ công cụ này:
             được khoảng ±25–30°, quá thế là bàn chân vặn rời khỏi ống chân.
             Chỉ con số này mới nói được clip có lỗi hay không.
 
+  MŨI CHÂN  góc mũi chân lệch so với hướng nhìn của thân người, nhìn từ trên
+            xuống. Người đi bộ mở mũi chân ra khoảng 5–15° và giữ gần như cố
+            định; hai clip đi bộ dựng bằng tay của dự án nằm trong ±3°. Nếu góc
+            này quét qua ±180° thì bàn chân đang chỉ ngược ra sau.
+
   SO THẾ GIỚI  góc giữa lòng bàn chân và hướng lên của thế giới. KHÔNG bị giới
             hạn gì: chân xoay ra ngoài hay người nghiêng đều làm nó lớn lên
             một cách hoàn toàn bình thường. Cột này chỉ để tham khảo.
@@ -43,7 +48,9 @@ import glb
 NC = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16}
 UP = (0.0, 1.0, 0.0)
 ANKLE_LIMIT = 30.0        # độ, giới hạn sinh lý của khớp cổ chân
+YAW_LIMIT = 35.0          # độ, mức mở mũi chân còn coi là tự nhiên
 MIN_PROJ = 0.25           # dưới mức này coi như bàn chân thẳng hàng cẳng chân
+MIN_FLAT = 0.5            # dưới mức này bàn chân dựng đứng, hướng mũi không rõ
 
 
 def read_acc(g, blob, i):
@@ -166,6 +173,51 @@ def signed_roll(fwd, normal, ref):
     return a, min(ln, lr)
 
 
+def _forward_sign(parent, by_name, rest_r, rest_t):
+    """Dấu để đường nối hai khớp háng cho ra hướng NHÌN, không phải hướng sau."""
+    hipL, hipR = by_name.get('J_Bip_L_UpperLeg'), by_name.get('J_Bip_R_UpperLeg')
+    if hipL is None or hipR is None:
+        return None, None, None
+    pl, _ = world(hipL, parent, {}, rest_r, rest_t, 0.0)
+    pr, _ = world(hipR, parent, {}, rest_r, rest_t, 0.0)
+    hip = (pr[0] - pl[0], 0.0, pr[2] - pl[2])
+    if math.sqrt(dot(hip, hip)) < 1e-9:
+        return None, None, None
+    cand = norm(cross(UP, norm(hip)))
+    toes = (0.0, 0.0, 0.0)
+    for side in ('L', 'R'):
+        f, t_ = by_name.get('J_Bip_%s_Foot' % side), by_name.get('J_Bip_%s_ToeBase' % side)
+        if f is None or t_ is None:
+            continue
+        pf, _ = world(f, parent, {}, rest_r, rest_t, 0.0)
+        pt, _ = world(t_, parent, {}, rest_r, rest_t, 0.0)
+        v = (pt[0] - pf[0], 0.0, pt[2] - pf[2])
+        if math.sqrt(dot(v, v)) > 1e-9:
+            v = norm(v)
+            toes = tuple(toes[i] + v[i] for i in range(3))
+    if math.sqrt(dot(toes, toes)) < 1e-9:
+        return None, None, None
+    return (1.0 if dot(cand, norm(toes)) > 0 else -1.0), hipL, hipR
+
+
+def _foot_yaw(pf, pt, parent, tracks, rest_r, rest_t, hipL, hipR, sign, t):
+    """Góc mũi chân lệch so với hướng nhìn. None khi bàn chân dựng gần đứng."""
+    v = tuple(pt[i] - pf[i] for i in range(3))
+    length = math.sqrt(dot(v, v))
+    flat = (v[0], 0.0, v[2])
+    if length < 1e-9 or math.sqrt(dot(flat, flat)) / length < MIN_FLAT:
+        return None
+    pl, _ = world(hipL, parent, tracks, rest_r, rest_t, t)
+    pr, _ = world(hipR, parent, tracks, rest_r, rest_t, t)
+    hip = (pr[0] - pl[0], 0.0, pr[2] - pl[2])
+    if math.sqrt(dot(hip, hip)) < 1e-9:
+        return None
+    body = tuple(x * sign for x in norm(cross(UP, norm(hip))))
+    fwd = norm(flat)
+    a = math.degrees(math.acos(max(-1.0, min(1.0, dot(fwd, body)))))
+    return -a if dot(cross(body, fwd), UP) < 0 else a
+
+
 def measure(model):
     gltf, blob = glb.read(model)
     parent, by_name, rest_r, rest_t = scene_graph(gltf)
@@ -175,7 +227,11 @@ def measure(model):
         tmax = max((times[-1] for tr in tracks.values()
                     for (times, _) in tr.values()), default=0.0)
         n = max(2, int(round(tmax * 30)) + 1)
-        ankle, wrld, skipped = [], [], 0
+        ankle, wrld, yaws, skipped = [], [], [], 0
+        # Hướng nhìn hiệu chuẩn từ tư thế nghỉ: lúc đứng nghỉ mũi chân chỉ về
+        # trước. Không suy ra bằng lập luận về chiều tay của hệ trục — hệ của
+        # Blender và hệ của glTF ngược tay nhau và tôi đã nhầm một lần.
+        sign, hipL, hipR = _forward_sign(parent, by_name, rest_r, rest_t)
         for side in ('L', 'R'):
             foot = by_name.get('J_Bip_%s_Foot' % side)
             toe = by_name.get('J_Bip_%s_ToeBase' % side)
@@ -203,6 +259,11 @@ def measure(model):
                 nrm = norm(m3_apply(rf, a_up))
                 aw, _ = signed_roll(fwd, nrm, UP)
                 aa, conf = signed_roll(fwd, nrm, shin)
+                if sign is not None:
+                    y = _foot_yaw(pf, pt, parent, tracks, rest_r, rest_t,
+                                  hipL, hipR, sign, t)
+                    if y is not None:
+                        yaws.append(y)
                 if aw is not None:
                     wrld.append(abs(aw))
                 if aa is None or conf < MIN_PROJ:
@@ -213,6 +274,7 @@ def measure(model):
             continue
         rows.append(dict(
             name=anim.get('name', '?'),
+            yaw_lo=min(yaws) if yaws else 0.0, yaw_hi=max(yaws) if yaws else 0.0,
             ankle_avg=sum(ankle) / len(ankle), ankle_max=max(ankle),
             world_avg=sum(wrld) / len(wrld) if wrld else 0.0,
             world_max=max(wrld) if wrld else 0.0,
@@ -231,15 +293,19 @@ def main():
           % ANKLE_LIMIT)
     print('SO THẾ GIỚI chỉ để tham khảo, đại lượng này không bị giới hạn gì.')
     print()
-    print('%-24s %18s %18s %14s %s'
-          % ('clip', 'CỔ CHÂN tb/max', 'so t.giới tb/max', 'quá giới hạn',
-             'bỏ (rướn mũi)'))
+    print('%-24s %16s %18s %18s %s'
+          % ('clip', 'MŨI CHÂN từ..đến', 'CỔ CHÂN tb/max', 'so t.giới tb/max',
+             'quá giới hạn'))
     for r in rows:
-        flag = '  ← VẶN' if r['ankle_max'] > ANKLE_LIMIT + 1.0 else ''
-        print('%-24s %8.0f° %8.0f° %8.0f° %8.0f° %8d/%-5d %8d%s'
-              % (r['name'], r['ankle_avg'], r['ankle_max'],
-                 r['world_avg'], r['world_max'], r['bad'], r['total'],
-                 r['skipped'], flag))
+        flag = ''
+        if r['ankle_max'] > ANKLE_LIMIT + 1.0:
+            flag = '  ← VẶN CỔ CHÂN'
+        elif max(abs(r['yaw_lo']), abs(r['yaw_hi'])) > YAW_LIMIT + 1.0:
+            flag = '  ← MŨI CHÂN XOAY'
+        print('%-24s %7.0f°..%5.0f° %8.0f° %8.0f° %8.0f° %8.0f° %6d/%-5d%s'
+              % (r['name'], r['yaw_lo'], r['yaw_hi'],
+                 r['ankle_avg'], r['ankle_max'],
+                 r['world_avg'], r['world_max'], r['bad'], r['total'], flag))
 
 
 if __name__ == '__main__':
