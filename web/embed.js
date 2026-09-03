@@ -134,16 +134,12 @@ export async function createSinger(target, options = {}) {
 
     // --- âm thanh, chỉ dựng khi được yêu cầu ---
     let audioCtx = null, analyser = null, spectrum = null, audioEl = null, track = null;
-    function ensureAudio(file) {
-        const tracks = character.manifest.audioTracks || [];
-        track = tracks.find(t => t.file === file) || tracks.find(t => t.default) || tracks[0];
-        if (!track) return false;
+    let uploadedUrl = null;
+    function ensureGraph() {
         if (!audioEl) {
-            audioEl = new Audio(new URL('audio/' + track.file, base).href);
+            audioEl = new Audio();
             audioEl.crossOrigin = 'anonymous';
             audioEl.loop = true;
-        } else if (!audioEl.src.endsWith(track.file)) {
-            audioEl.src = new URL('audio/' + track.file, base).href;
         }
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -154,6 +150,15 @@ export async function createSinger(target, options = {}) {
             audioCtx.createMediaElementSource(audioEl).connect(analyser);
             analyser.connect(audioCtx.destination);
         }
+    }
+
+    function ensureAudio(file) {
+        const tracks = character.manifest.audioTracks || [];
+        track = tracks.find(t => t.file === file) || tracks.find(t => t.default) || tracks[0];
+        if (!track) return false;
+        ensureGraph();
+        const url = new URL('audio/' + track.file, base).href;
+        if (audioEl.src !== url) { audioEl.src = url; character.beat.reset(); }
         return true;
     }
 
@@ -198,7 +203,12 @@ export async function createSinger(target, options = {}) {
             `nhân vật trên khung   ${sp.x.toFixed(0)}% ngang   ${sp.y.toFixed(0)}% dọc\n`
             + `tâm nhìn   x ${fmt(v.target.x)}  y ${fmt(v.target.y)}  z ${fmt(v.target.z)}\n`
             + `máy quay   x ${fmt(v.camera.x)}  y ${fmt(v.camera.y)}  z ${fmt(v.camera.z)}\n`
-            + `khoảng cách ${v.distance.toFixed(2)} m   ·   ${frame_.dragMode === 'dichuyen' ? 'kéo = dời' : 'kéo = xoay'}`;
+            + `khoảng cách ${v.distance.toFixed(2)} m   ·   ${frame_.dragMode === 'dichuyen' ? 'kéo = dời' : 'kéo = xoay'}`
+            + (playing && character.beat.bpm
+                ? `\nnhịp ${character.beat.bpm.toFixed(0)} phách/phút`
+                  + `  ·  độ tin ${character.beat.confidence.toFixed(0)}`
+                  + `  ·  tốc độ nhảy ×${(character.current ? character.current.timeScale : 1).toFixed(2)}`
+                : '');
     }
 
     function frame() {
@@ -219,6 +229,33 @@ export async function createSinger(target, options = {}) {
 
     return {
         character, scene, camera, renderer, controls,
+        /** Phát một file nhạc người dùng tự chọn. Nhận File hoặc Blob.
+         *  Bài tự tải lên mặc định coi là CÓ lời — người tải biết rõ hơn mọi
+         *  phép đoán từ tín hiệu. Đặt vocals:false nếu là nhạc không lời. */
+        async playFile(file, { vocals = true, dance = true } = {}) {
+            ensureGraph();
+            if (uploadedUrl) URL.revokeObjectURL(uploadedUrl);
+            uploadedUrl = URL.createObjectURL(file);
+            audioEl.src = uploadedUrl;
+            track = { file: file.name || 'tải lên', label: file.name || 'tải lên', vocals };
+            character.beat.reset();
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
+            await audioEl.play();
+            playing = true;
+            if (dance) {
+                const d = character.danceStates;
+                if (d.length) character.setState(d[0]);
+            }
+            return { name: track.file, vocals };
+        },
+        /** Nhịp đang dò được: { bpm, confidence, beatPhase }. */
+        getBeat() {
+            const b = character.beat;
+            return { bpm: b.bpm, confidence: b.confidence, beatPhase: b.beatPhase,
+                     timeScale: character.current ? character.current.timeScale : 1 };
+        },
+        set beatSync(on) { character.beatSync = !!on; },
+        get beatSync() { return character.beatSync; },
         states: character.manifest.states,
         hairstyles: character.manifest.hairstyles,
         audioTracks: character.manifest.audioTracks || [],

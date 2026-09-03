@@ -6,6 +6,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { HairPhysics } from './hair.js';
 import { classifyVowel, createLoudnessGate } from './lipsync.js';
+import { BeatTracker, matchTimeScale } from './beat.js';
 
 const STATE_FADE = 0.25;
 const VISEME_ATTACK = 14.0;   // tốc độ mở khẩu hình
@@ -34,6 +35,9 @@ export class Character {
         this.hair = new HairPhysics();
         this.gate = createLoudnessGate();
         this.visemes = { A: 0, I: 0, U: 0, E: 0, O: 0 };
+        this.beat = new BeatTracker();
+        this.beatSync = true;        // cho điệu nhảy chạy theo nhịp bài hát
+        this._syncedFor = null;
 
         for (const clip of this.clips) this.actions[clip.name] = this.mixer.clipAction(clip);
         this._prepare();
@@ -119,6 +123,32 @@ export class Character {
     }
 
     /** delta tính bằng giây. audio là { spectrumDb, sampleRate, vocals } hoặc null. */
+    /** Trạng thái nào nên chạy theo nhịp, khai báo trong scripts/catalog.py. */
+    _stateInfo(clip) {
+        return this.manifest.states.find(s => s.clip === clip) || null;
+    }
+
+    /** Danh sách clip vũ đạo, để tự chuyển sang khi bật nhạc. */
+    get danceStates() {
+        return this.manifest.states.filter(s => s.dance).map(s => s.clip);
+    }
+
+    _syncTempo() {
+        const st = this._stateInfo(this.currentName);
+        if (!this.current) return;
+        if (!this.beatSync || !st || !st.beatSync || this.beat.confidence < 6) {
+            if (this.current.timeScale !== 1) this.current.timeScale = 1;
+            this._syncedFor = null;
+            return;
+        }
+        const key = `${this.currentName}|${this.beat.bpm.toFixed(1)}`;
+        if (key === this._syncedFor) return;
+        const seconds = this.current.getClip().duration;
+        const m = matchTimeScale(seconds, this.beat.bpm);
+        this.current.timeScale = m.timeScale;
+        this._syncedFor = key;
+    }
+
     update(delta, audio = null) {
         this.mixer.update(delta);
         if (!this._hairReady) {
@@ -128,6 +158,8 @@ export class Character {
         }
         this.hair.update(delta);
         this._updateVisemes(delta, audio);
+        if (audio && audio.spectrumDb) this.beat.push(audio.spectrumDb, delta);
+        this._syncTempo();
     }
 
     _updateVisemes(delta, audio) {

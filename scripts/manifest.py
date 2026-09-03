@@ -53,6 +53,8 @@ def write_manifest(path, model_file, source_file, frames_by_clip):
             'accent': s['accent'],
             'frames': by_name[s['clip']],
             'fps': FPS,
+            'beatSync': bool(s.get('beat_sync')),
+            'dance': bool(s.get('dance')),
         })
 
     data = {

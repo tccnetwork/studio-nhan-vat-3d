@@ -215,6 +215,35 @@ dời nhân vật là tâm xoay rời khỏi nó. Nay cả hai trang dùng `core
 Riêng studio, tâm xoay còn dời theo nút cận cảnh — xoay quanh khuôn mặt là quay
 quanh khuôn mặt thật, không quanh giữa người.
 
+## Nhảy theo nhạc tự tải lên
+
+Kéo thả một file nhạc vào trang studio hoặc trang demo nhúng, nhân vật chuyển
+sang trạng thái vũ đạo và **chỉnh tốc độ để vòng nhảy trùng nhịp bài hát**.
+
+`web/core/beat.js` dò nhịp bằng spectral flux: mỗi khung tính tổng phần năng
+lượng *tăng* so với khung trước — tiếng gõ, tiếng bật dây, phụ âm đầu đều làm
+năng lượng bật lên, nên đường flux có đỉnh nhọn ở đúng chỗ có nhịp. Tự tương
+quan đường đó cho ra chu kỳ.
+
+Hai chi tiết quan trọng:
+
+* **Sửa lỗi bát độ.** Chu kỳ gấp đôi bao giờ cũng tự tương quan mạnh vì cứ hai
+  phách thì trùng một lần, nên đỉnh cao nhất hay rơi vào nửa tempo — 160 phách
+  bị đọc thành 80. Nếu chu kỳ bằng một nửa vẫn còn mạnh gần bằng thì chọn cái
+  ngắn hơn.
+* **Không cần biết clip ứng với mấy phách nhạc.** `matchTimeScale` chọn số phách
+  sao cho tốc độ phát lệch ít nhất so với 1,0, nhờ vậy điệu nhảy vừa khớp lưới
+  nhịp vừa giữ gần đúng tốc độ gốc.
+
+Kiểm thử bằng chuỗi phổ tổng hợp có tempo biết trước, chạy thẳng trong node:
+đúng 10/10 từ 70 đến 175 phách/phút, sai số dưới 0,3%. Đo tích hợp trong trình
+duyệt: nhạc 128 phách cho tốc độ ×0,979 tức vòng nhảy đúng 4,00 phách; 96 phách
+cho 3,00 phách; 150 phách cho 5,00 phách. Trạng thái không đánh dấu `beat_sync`
+trong `scripts/catalog.py` thì không bị tua.
+
+Bài tự tải lên mặc định coi là **có lời** — người tải biết rõ hơn mọi phép đoán
+từ tín hiệu.
+
 ## Khẩu hình
 
 Nguyên âm được đoán từ **hai formant** — hai đỉnh cộng hưởng của khoang miệng.

@@ -828,6 +828,53 @@ function setupUIEventListeners() {
         }
     });
 
+    // --- tải bài hát lên ---
+    const songDrop = document.getElementById('song-drop');
+    const beatNote = document.getElementById('beat-note');
+    let uploadedUrl = null;
+    async function useSong(file) {
+        if (!file || !audioElement) return;
+        setupAudioContext();
+        if (uploadedUrl) URL.revokeObjectURL(uploadedUrl);
+        uploadedUrl = URL.createObjectURL(file);
+        audioElement.src = uploadedUrl;
+        // Bài người dùng tự tải lên mặc định coi là CÓ lời: người tải biết rõ
+        // hơn mọi phép đoán từ tín hiệu — xem chú thích trong scripts/catalog.py.
+        currentTrack = { file: file.name, label: file.name, vocals: true };
+        if (character) character.beat.reset();
+        updateLipSyncNote();
+        try {
+            await audioElement.play();
+            isAudioPlaying = true;
+            document.getElementById('btn-toggle-audio').textContent = '⏸ Tắt Nhạc';
+            songDrop.innerHTML = 'Đang phát: <b style="color:#e2e8f0">' + file.name + '</b>';
+            const dance = manifest.states.filter(s => s.dance);
+            if (dance.length) switchAnimationState(dance[0].clip);
+        } catch (err) {
+            songDrop.textContent = 'Không phát được file này: ' + err.message;
+        }
+    }
+    if (songDrop) {
+        document.getElementById('song-pick').addEventListener('change',
+            e => useSong(e.target.files[0]));
+        ['dragenter', 'dragover'].forEach(t => songDrop.addEventListener(t, e => {
+            e.preventDefault(); songDrop.style.borderColor = '#7fb2ff';
+        }));
+        songDrop.addEventListener('dragleave', () => { songDrop.style.borderColor = '#4b5675'; });
+        songDrop.addEventListener('drop', e => {
+            e.preventDefault(); songDrop.style.borderColor = '#4b5675';
+            useSong(e.dataTransfer.files[0]);
+        });
+        setInterval(() => {
+            if (!character || !beatNote) return;
+            const b = character.beat;
+            beatNote.textContent = (isAudioPlaying && b.bpm)
+                ? `nhịp ${b.bpm.toFixed(0)} phách/phút · độ tin ${b.confidence.toFixed(0)}`
+                  + ` · tốc độ nhảy ×${(character.current ? character.current.timeScale : 1).toFixed(2)}`
+                : '';
+        }, 400);
+    }
+
     const btnAudio = document.getElementById('btn-toggle-audio');
     btnAudio.addEventListener('click', () => {
         setupAudioContext();

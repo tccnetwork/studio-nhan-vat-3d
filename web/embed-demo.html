@@ -37,6 +37,15 @@
   <div class="row" id="states"></div>
   <div class="row" id="hairs"></div>
   <div class="row" id="audio"></div>
+  <div id="drop" style="margin-top:12px;border:1.5px dashed #39435c;border-radius:10px;
+       padding:16px;text-align:center;color:#8d97ad;font-size:13px;">
+    Kéo thả một file nhạc vào đây, hoặc
+    <label style="color:#7fb2ff;cursor:pointer;text-decoration:underline">chọn file
+      <input type="file" id="pick" accept="audio/*" style="display:none">
+    </label>
+    — nhân vật sẽ nhảy theo nhịp bài hát.
+  </div>
+  <p id="beat" style="font:12.5px/1.6 ui-monospace,monospace;color:#8d97ad;margin-top:8px"></p>
   <pre id="code"></pre>
 </div>
 <script type="module">
@@ -67,7 +76,29 @@ mk(modeHost, '📋 Chép khung hình này', () => {
   const fr = singer.getFraming();
   const snippet = 'const singer = await createSinger(\'#slot\', {\n'
     + '  framing: ' + JSON.stringify(fr) + ',\n});';
-  document.getElementById('code').textContent = snippet;
+  // --- tải bài hát lên ---
+const drop = document.getElementById('drop');
+const beatOut = document.getElementById('beat');
+async function useFile(f) {
+  if (!f) return;
+  drop.style.borderColor = '#4d7fd6';
+  const r = await singer.playFile(f);
+  drop.innerHTML = 'Đang phát: <b style="color:#cfd6e4">' + r.name + '</b> — nhân vật nhảy theo nhịp.';
+  clearInterval(window.__bt);
+  window.__bt = setInterval(() => {
+    const b = singer.getBeat();
+    beatOut.textContent = b.bpm
+      ? `nhịp ${b.bpm.toFixed(0)} phách/phút · độ tin ${b.confidence.toFixed(0)} · tốc độ nhảy ×${b.timeScale.toFixed(2)}`
+      : 'đang nghe để dò nhịp…';
+  }, 400);
+}
+document.getElementById('pick').addEventListener('change', e => useFile(e.target.files[0]));
+['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => {
+  e.preventDefault(); drop.style.borderColor = '#4d7fd6'; }));
+drop.addEventListener('dragleave', () => { drop.style.borderColor = '#39435c'; });
+drop.addEventListener('drop', e => { e.preventDefault(); useFile(e.dataTransfer.files[0]); });
+
+document.getElementById('code').textContent = snippet;
   navigator.clipboard && navigator.clipboard.writeText(snippet).catch(() => {});
 });
 const coordsBtn = mk(modeHost, '📐 Ẩn toạ độ', () => {
@@ -93,6 +124,9 @@ const singer = await createSinger('#slot', { state: '15_BuocDi_Mocap' });
 singer.setHairstyle('bob');
 singer.setColor('hair', '#ffc0cb');
 await singer.playAudio('vocal_song_pop.mp3');
+// hoặc phát một file người dùng tự chọn, nhân vật nhảy theo nhịp:
+await singer.playFile(fileTuNguoiDung);
+singer.getBeat();   // { bpm, confidence, beatPhase, timeScale }
 
 // ${singer.states.length} trạng thái, ${singer.hairstyles.length} kiểu tóc, ${singer.audioTracks.length} bản nhạc`;
 </script>
