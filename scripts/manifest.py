@@ -15,9 +15,23 @@ import catalog
 FPS = 30
 
 
-def write_manifest(path, model_file, source_file, actions):
-    """actions: bpy.data.actions (hoặc bất kỳ thứ gì có .get(ten).frame_range)."""
-    by_name = {a.name: a for a in actions}
+def frames_from_actions(actions):
+    """Số frame của từng clip, đọc từ bpy.data.actions lúc dựng."""
+    out = {}
+    for a in actions:
+        first, last = a.frame_range
+        out[a.name] = int(round(last - first)) + 1
+    return out
+
+
+def write_manifest(path, model_file, source_file, frames_by_clip):
+    """frames_by_clip: {tên clip: số frame}.
+
+    Nhận sẵn số frame thay vì nhận đối tượng của Blender, nhờ đó
+    tools/write_manifest.py sinh lại được manifest từ chính file GLB đã xuất mà
+    không phải chạy lại cả quy trình dựng mười lăm phút.
+    """
+    by_name = frames_by_clip
     missing = [s['clip'] for s in catalog.STATES if s['clip'] not in by_name]
     if missing:
         raise RuntimeError(
@@ -30,8 +44,6 @@ def write_manifest(path, model_file, source_file, actions):
 
     states = []
     for s in sorted(catalog.STATES, key=lambda x: x['order']):
-        act = by_name[s['clip']]
-        first, last = act.frame_range
         states.append({
             'clip': s['clip'],
             'order': s['order'],
@@ -39,7 +51,7 @@ def write_manifest(path, model_file, source_file, actions):
             'label': s['label'],
             'desc': s['desc'],
             'accent': s['accent'],
-            'frames': int(round(last - first)) + 1,
+            'frames': by_name[s['clip']],
             'fps': FPS,
         })
 
@@ -51,6 +63,7 @@ def write_manifest(path, model_file, source_file, actions):
         'defaultState': states[0]['clip'],
         'states': states,
         'hairstyles': [dict(h) for h in catalog.HAIRSTYLES],
+        'audioTracks': [dict(t) for t in catalog.AUDIO_TRACKS],
         'materialGroups': catalog.MATERIAL_GROUPS,
     }
     with open(path, 'w', encoding='utf-8') as f:

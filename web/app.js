@@ -18,7 +18,7 @@ const DRACO_DECODER_PATH = 'vendor/draco/';
 // scripts/catalog.py, nên thêm một trạng thái chỉ cần sửa một chỗ duy nhất.
 const MANIFEST_URL = '../build/manifest.json';
 const BUILD_DIR = '../build/';
-const AUDIO_URL = '../audio/jpop_anime_beat.mp3';
+const AUDIO_DIR = '../audio/';
 
 let manifest = null;
 let stateByClip = {};      // ten clip -> muc trong manifest
@@ -34,7 +34,8 @@ let currentAction = null;
 let currentActionName = '01_DungNghiem';
 
 let audioContext = null, analyser = null, audioSource = null;
-let audioDataArray = null, audioElement = null;
+let audioDataArray = null, audioSpectrumDb = null, audioElement = null;
+let currentTrack = { file: 'vocal_song_pop.mp3', vocals: true };
 let isAudioPlaying = false;
 let currentVocalEnergy = 0;
 
@@ -139,6 +140,7 @@ function init() {
     loadManifest().then(() => {
         buildStateButtons();
         buildHairstyleButtons();
+        buildAudioButtons();
         loadModel(BUILD_DIR + manifest.model + '?v=' + Date.now());
     });
 }
@@ -223,6 +225,46 @@ function buildHairstyleButtons() {
         b.addEventListener('click', () => switchHairstyle(h.key));
         box.appendChild(b);
     });
+}
+
+function buildAudioButtons() {
+    const box = document.getElementById('audio-track-grid');
+    const tracks = manifest.audioTracks || [];
+    if (!box || tracks.length === 0) return;
+    currentTrack = tracks.find(t => t.default) || tracks[0];
+    box.innerHTML = '';
+    tracks.forEach(t => {
+        const b = document.createElement('button');
+        b.id = 'btn-track-' + t.file.replace(/[^a-z0-9]/gi, '_');
+        b.className = 'btn audio-btn' + (t === currentTrack ? ' active' : '');
+        b.style.cssText = 'justify-content:flex-start;padding:8px 10px;font-size:12px;';
+        b.textContent = `${t.icon} ${t.label}` + (t.vocals ? '' : ' — không nhép miệng');
+        b.addEventListener('click', () => selectAudioTrack(t));
+        box.appendChild(b);
+    });
+    updateLipSyncNote();
+}
+
+function selectAudioTrack(track) {
+    currentTrack = track;
+    document.querySelectorAll('#audio-track-grid .btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('btn-track-' + track.file.replace(/[^a-z0-9]/gi, '_'));
+    if (btn) btn.classList.add('active');
+    const wasPlaying = isAudioPlaying;
+    if (audioElement) {
+        audioElement.pause();
+        audioElement.src = AUDIO_DIR + track.file;
+        if (wasPlaying) audioElement.play().catch(() => {});
+    }
+    updateLipSyncNote();
+}
+
+function updateLipSyncNote() {
+    const note = document.getElementById('lipsync-note');
+    if (!note) return;
+    note.textContent = currentTrack.vocals
+        ? 'Bản này có giọng hát nên khẩu hình chạy theo nguyên âm nghe được.'
+        : 'Bản này không có lời nên nhân vật ngậm miệng.';
 }
 
 function stateButtonId(clip) {
@@ -316,7 +358,7 @@ function setupStage() {
 }
 
 function setupAudioElement() {
-    audioElement = new Audio(AUDIO_URL);
+    audioElement = new Audio(AUDIO_DIR + currentTrack.file);
     audioElement.crossOrigin = "anonymous";
     audioElement.loop = true;
 }
@@ -325,9 +367,12 @@ function setupAudioContext() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.6;
+        // 256 bin cho ra độ phân giải ~187 Hz mỗi bin — quá thô để tách được
+        // hai formant vốn cách nhau vài trăm Hz. 2048 cho ~23 Hz mỗi bin.
+        analyser.fftSize = 2048;
+        analyser.smoothingTimeConstant = 0.55;
         audioDataArray = new Uint8Array(analyser.frequencyBinCount);
+        audioSpectrumDb = new Float32Array(analyser.frequencyBinCount);
 
         audioSource = audioContext.createMediaElementSource(audioElement);
         audioSource.connect(analyser);
@@ -904,6 +949,171 @@ function updateHairPhysics(delta) {
     if (steps === 3) hairAccumulator = 0;   // tụt fps thì bỏ bớt chứ không dồn nợ
 }
 
+// ==========================================
+// KHẨU HÌNH THEO ÂM VỊ
+//
+// Bản trước xoay vòng nguyên âm theo đồng hồ: Math.floor(time * 3.5) % 4.
+// Nhìn thoáng thì khớp nhạc vì biên độ lấy từ âm lượng, nhưng miệng mở hình gì
+// thì hoàn toàn không liên quan tới tiếng hát.
+//
+// Ở đây nguyên âm được đoán từ hai formant — hai đỉnh cộng hưởng của khoang
+// miệng. F1 phản ánh độ mở hàm, F2 phản ánh vị trí lưỡi trước sau; cặp (F1, F2)
+// gần như xác định duy nhất một nguyên âm. Bảng dưới lấy theo giọng nữ, hợp với
+// nhân vật này.
+// ==========================================
+const VOWELS = [
+    { key: 'A', f1: 850, f2: 1220 },
+    { key: 'I', f1: 350, f2: 2750 },
+    { key: 'U', f1: 370, f2: 950 },
+    { key: 'E', f1: 560, f2: 2350 },
+    { key: 'O', f1: 450, f2: 800 },
+];
+// F2 của các nguyên âm sau nằm rất thấp — O ở khoảng 800 Hz, U ở 950 — nên dải
+// dò F2 phải chạm xuống dưới 1000, nếu không cả hai đều bị dò trượt và lẫn vào
+// nhau. Đổi lại phải ràng buộc F2 luôn cao hơn F1 để hai phép dò không cùng bắt
+// vào một đỉnh.
+const F1_BAND = [250, 1000];
+const F2_BAND = [700, 3200];
+const F2_ABOVE_F1 = 1.25;
+const VOICE_BAND = [90, 4000];
+// Không đặt ngưỡng dB tuyệt đối: giá trị getFloatFrequencyData phụ thuộc mức
+// thu và cách phối của từng bản, nên một con số cứng chỉ đúng với đúng một
+// file. Thay vào đó theo dõi mức im lặng và mức to nhất gần đây rồi chuẩn hoá
+// theo khoảng đó.
+const LEVEL_ADAPT = 0.4;           // tốc độ bám của mức nền, mỗi giây
+const LEVEL_MIN_RANGE = 8;         // dB, khoảng động tối thiểu để coi là có tiếng
+let levelFloor = null;
+let levelCeil = null;
+const VISEME_ATTACK = 14.0;        // tốc độ mở khẩu hình
+const VISEME_RELEASE = 7.0;        // tốc độ đóng lại, chậm hơn cho đỡ giật
+
+const visemeWeights = { A: 0, I: 0, U: 0, E: 0, O: 0 };
+let visemeJaw = 0;
+
+function peakInBand(db, sampleRate, lo, hi) {
+    const binHz = sampleRate / (db.length * 2);
+    const from = Math.max(1, Math.floor(lo / binHz));
+    const to = Math.min(db.length - 1, Math.ceil(hi / binHz));
+    let best = from, bestDb = -Infinity;
+    for (let i = from; i <= to; i++) {
+        if (db[i] > bestDb) { bestDb = db[i]; best = i; }
+    }
+    // Nội suy parabol quanh đỉnh: không có bước này thì tần số bị lượng tử
+    // theo bin và nguyên âm nhảy qua nhảy lại giữa hai ô cạnh nhau.
+    const y0 = db[best - 1], y1 = db[best], y2 = db[best + 1];
+    let shift = 0;
+    if (isFinite(y0) && isFinite(y2)) {
+        const denom = y0 - 2 * y1 + y2;
+        if (Math.abs(denom) > 1e-6) shift = 0.5 * (y0 - y2) / denom;
+    }
+    return { hz: (best + shift) * binHz, db: bestDb };
+}
+
+function bandEnergyDb(db, sampleRate, lo, hi) {
+    const binHz = sampleRate / (db.length * 2);
+    const from = Math.max(1, Math.floor(lo / binHz));
+    const to = Math.min(db.length - 1, Math.ceil(hi / binHz));
+    let sum = 0;
+    for (let i = from; i <= to; i++) sum += db[i];
+    return sum / (to - from + 1);
+}
+
+/** Đoán nguyên âm từ một phổ. Hàm thuần: cùng đầu vào luôn cho cùng kết quả,
+ *  không giữ trạng thái, nên kiểm thử được bằng phổ tổng hợp có formant biết trước.
+ *  Việc quyết định "lúc này có đang phát ra tiếng không" thuộc về updateLipSync. */
+function classifyVowel(db, sampleRate) {
+    const p1 = peakInBand(db, sampleRate, F1_BAND[0], F1_BAND[1]);
+    const lo2 = Math.max(F2_BAND[0], p1.hz * F2_ABOVE_F1);
+    if (lo2 >= F2_BAND[1]) return null;
+    const p2 = peakInBand(db, sampleRate, lo2, F2_BAND[1]);
+    if (!isFinite(p1.db) || !isFinite(p2.db)) return null;
+
+    // So sánh theo thang log: tai người nghe tần số theo tỉ lệ chứ không theo hiệu.
+    let best = null, bestDist = Infinity;
+    for (const v of VOWELS) {
+        const d1 = Math.log(p1.hz / v.f1);
+        const d2 = Math.log(p2.hz / v.f2);
+        const dist = d1 * d1 + d2 * d2 * 0.7;   // F1 quan trọng hơn cho độ mở miệng
+        if (dist < bestDist) { bestDist = dist; best = v.key; }
+    }
+    return { key: best, f1: p1.hz, f2: p2.hz };
+}
+
+/** Mức to hiện tại, chuẩn hoá 0..1 theo nền và trần bám chậm.
+ *  Không dùng ngưỡng dB tuyệt đối vì giá trị getFloatFrequencyData phụ thuộc
+ *  mức thu và cách phối của từng bản nhạc. */
+function voiceLoudness(db, sampleRate, delta) {
+    const level = bandEnergyDb(db, sampleRate, VOICE_BAND[0], VOICE_BAND[1]);
+    if (!isFinite(level)) return 0;
+    if (levelFloor === null) { levelFloor = level; levelCeil = level + LEVEL_MIN_RANGE; }
+    const k = Math.min(1, LEVEL_ADAPT * delta);
+    levelFloor += (level < levelFloor ? 0.5 : k * 0.02) * (level - levelFloor);
+    levelCeil += (level > levelCeil ? 0.5 : k * 0.05) * (level - levelCeil);
+    const range = Math.max(LEVEL_MIN_RANGE, levelCeil - levelFloor);
+    return Math.min(1, Math.max(0, (level - levelFloor) / range));
+}
+
+function updateLipSync(delta) {
+    if (!analyser || !audioSpectrumDb) return;
+    analyser.getFloatFrequencyData(audioSpectrumDb);
+    // Chỉ nhép khi bản đang phát thực sự có giọng hát. Đây là điều khai báo
+    // trong scripts/catalog.py chứ không phải đoán từ tín hiệu — xem chú thích
+    // ở đó để biết vì sao không đoán được.
+    let guess = null;
+    if (isAudioPlaying && currentTrack.vocals) {
+        const loud = voiceLoudness(audioSpectrumDb, audioContext.sampleRate, delta);
+        if (loud > 0.25) {                     // trên nền, tức đang có câu hát
+            guess = classifyVowel(audioSpectrumDb, audioContext.sampleRate);
+            if (guess) guess.openness = Math.min(1, (loud - 0.25) / 0.55);
+        }
+    }
+
+    for (const key in visemeWeights) {
+        const target = guess && guess.key === key ? guess.openness : 0;
+        const rate = target > visemeWeights[key] ? VISEME_ATTACK : VISEME_RELEASE;
+        visemeWeights[key] += (target - visemeWeights[key]) * Math.min(1, rate * delta);
+    }
+    const jawTarget = guess ? guess.openness * 0.55 : 0;
+    visemeJaw += (jawTarget - visemeJaw) * Math.min(1, VISEME_RELEASE * delta);
+
+    const slot = {
+        A: morphIndices.mouthA, I: morphIndices.mouthI, U: morphIndices.mouthU,
+        E: morphIndices.mouthE, O: morphIndices.mouthO,
+    };
+    morphMeshes.forEach(mesh => {
+        if (!mesh.morphTargetInfluences) return;
+        for (const key in slot) {
+            if (slot[key] >= 0) mesh.morphTargetInfluences[slot[key]] = visemeWeights[key] * 0.92;
+        }
+        if (morphIndices.jawOpen >= 0) mesh.morphTargetInfluences[morphIndices.jawOpen] = visemeJaw;
+    });
+}
+
+// Tự kiểm tra bộ phân loại nguyên âm. Mở Console của trình duyệt rồi gõ:
+//     __vowelProbe()
+// Nó dựng phổ tổng hợp có formant biết trước cho từng nguyên âm rồi đối chiếu
+// kết quả. Phải ra "A->A I->I U->U E->E O->O", không có chữ SAI nào.
+window.__vowelProbe = () => {
+    const SR = 48000, N = 1024;
+    const mk = (f1, f2) => {
+        const db = new Float32Array(N).fill(-95);
+        const binHz = SR / (N * 2);
+        for (let i = 1; i < N; i++) {
+            const hz = i * binHz;
+            db[i] = -80 + 46 * Math.exp(-Math.pow((hz - f1) / 90, 2))
+                        + 40 * Math.exp(-Math.pow((hz - f2) / 140, 2))
+                        + 30 * Math.exp(-Math.pow((hz - 220) / 60, 2));
+        }
+        return db;
+    };
+    levelFloor = null; levelCeil = null;
+    const cases = [['A',850,1220],['I',350,2750],['U',370,950],['E',560,2350],['O',450,800]];
+    return cases.map(([want,f1,f2]) => {
+        const g = classifyVowel(mk(f1,f2), SR);
+        return `${want}->${g ? g.key : 'null'}${g && g.key===want ? '' : ' SAI'}`;
+    }).join(' ');
+};
+
 function updateAnimationHUD(clipName) {
     let hud = document.getElementById('anim-hud');
     if (!hud) {
@@ -1072,22 +1282,14 @@ function animate() {
     if (isAudioPlaying && analyser && audioDataArray) {
         analyser.getByteFrequencyData(audioDataArray);
         let sum = 0;
-        for (let i = 2; i < 30; i++) sum += audioDataArray[i];
-        let avg = sum / 28;
-        currentVocalEnergy = Math.min(1.0, avg / 120);
-
-        if (document.getElementById('toggle-auto-lipsync').checked) {
-            const time = clock.getElapsedTime();
-            const visemeList = [morphIndices.mouthA, morphIndices.mouthO, morphIndices.mouthI, morphIndices.mouthE].filter(idx => idx >= 0);
-            const activeIdx = visemeList.length > 0 ? visemeList[Math.floor(time * 3.5) % visemeList.length] : -1;
-            
-            morphMeshes.forEach(mesh => {
-                if (mesh.morphTargetInfluences) {
-                    visemeList.forEach(vIdx => { mesh.morphTargetInfluences[vIdx] = 0; });
-                    if (activeIdx >= 0) mesh.morphTargetInfluences[activeIdx] = currentVocalEnergy * 0.90;
-                }
-            });
-        }
+        for (let i = 4; i < 60; i++) sum += audioDataArray[i];
+        currentVocalEnergy = Math.min(1.0, (sum / 56) / 120);
+    } else {
+        currentVocalEnergy = 0;
+    }
+    const lipsyncToggle = document.getElementById('toggle-auto-lipsync');
+    if (!lipsyncToggle || lipsyncToggle.checked) {
+        updateLipSync(delta);
     }
 
     // Gentle Sparkle Float

@@ -403,7 +403,8 @@ def build_character(wanted_states=None, fast=False):
         manifest.write_manifest(os.path.join(out_b_dir, 'manifest.json'),
                                 model_file=MODEL_NAME + '.glb',
                                 source_file=os.path.basename(input_glb),
-                                actions=bpy.data.actions)
+                                frames_by_clip=manifest.frames_from_actions(
+                                    bpy.data.actions))
 
     print(">>> Xuất GLB" + ("" if fast else ", FBX, BLEND") + "...")
     # Nén Draco: dữ liệu lưới chiếm 5,6 MB trong 9,66 MB, và đây là phần duy

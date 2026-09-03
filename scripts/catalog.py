@@ -67,6 +67,20 @@ HAIRSTYLES = [
          label='Tóc Bob Ngắn',       desc='Short Bob Silky'),
 ]
 
+# Các bản nhạc và bản nào thực sự có giọng hát.
+#
+# Không đoán bằng thuật toán: tôi đã đo trên chính hai file này bằng
+# tools/lipsync_check.py và hai bản gần như không phân biệt được qua phổ — độ
+# rõ tuần hoàn p90 bằng nhau (0,68), độ nhô formant trung vị chênh 0,5 dB. Một
+# bộ dò rẻ tiền sẽ nhép miệng theo tiếng nhạc cụ. Nên trạng thái này được khai
+# báo tường minh thay vì suy đoán.
+AUDIO_TRACKS = [
+    dict(file='vocal_song_pop.mp3', label='Bài hát có lời',
+         icon='🎤', vocals=True, default=True),
+    dict(file='jpop_anime_beat.mp3', label='Nhạc nền J-Pop',
+         icon='🎶', vocals=False),
+]
+
 # Nhóm vật liệu cho bộ đổi màu trong trình xem
 MATERIAL_GROUPS = {
     'hair':    ['Hair_00_HAIR', 'HairBack_00_HAIR'],

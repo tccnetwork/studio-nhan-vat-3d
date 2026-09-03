@@ -110,6 +110,25 @@ Ba nút vặn ở cuối `scripts/hairstyles.py`: `hang` (xoè hay rơi thẳng)
 **Khẩu hình chưa bám lời hát.** Miệng xoay vòng nguyên âm theo đồng hồ chứ
 không theo âm vị, dù trình xem đã có phân tích FFT thật.
 
+## Khẩu hình
+
+Nguyên âm được đoán từ **hai formant** — hai đỉnh cộng hưởng của khoang miệng.
+F1 phản ánh độ mở hàm, F2 phản ánh vị trí lưỡi trước sau; cặp (F1, F2) gần như
+xác định duy nhất một nguyên âm. Bản trước xoay vòng nguyên âm theo đồng hồ
+(`Math.floor(time * 3.5) % 4`) — nhìn thoáng thì khớp nhạc vì biên độ lấy từ âm
+lượng, nhưng miệng mở hình gì thì không liên quan tới tiếng hát.
+
+Kiểm tra bộ phân loại: mở Console trình duyệt, gõ `__vowelProbe()`. Nó dựng phổ
+tổng hợp có formant biết trước và phải trả về `A->A I->I U->U E->E O->O`.
+
+**Chỉ nhép khi bản nhạc có lời.** Trạng thái này được **khai báo** trong
+`AUDIO_TRACKS` của `scripts/catalog.py` chứ không đoán từ tín hiệu. Tôi đã thử
+đoán và đo bằng `tools/lipsync_check.py` trên chính hai file của dự án: bản có
+lời và bản nhạc nền gần như không phân biệt được qua phổ — độ rõ tuần hoàn p90
+bằng nhau (0,68), độ nhô formant trung vị chênh 0,5 dB. Ở mọi ngưỡng, bản không
+lời vượt qua gần bằng bản có lời. Tách giọng khỏi bản phối là bài toán cần mô
+hình học máy, không phải vài phép thống kê phổ.
+
 ## Vật lý tóc
 
 Tóc **không** được bake vào clip. `web/app.js` mô phỏng spring bone theo quy ước
