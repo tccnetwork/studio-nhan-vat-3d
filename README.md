@@ -190,6 +190,12 @@ nữa — canh lại lúc đó là giật view ngay giữa khi họ đang xoay.
 Tắt bằng `controls: false` cho một bản nhúng tĩnh, hoặc `zoom: false` /
 `pan: false` để chỉ cho xoay.
 
+Bật `showCoords: true` để hiện toạ độ tâm nhìn, vị trí máy quay và khoảng cách
+ngay trong khung — tiện khi đang căn góc. Mặc định tắt vì bản nhúng trên trang
+thật không nên hiện thông tin gỡ lỗi. Bật tắt lúc chạy bằng
+`singer.showCoords(true|false)`, hoặc lấy số bằng `singer.getView()` nếu muốn
+tự vẽ chỗ khác.
+
 **Trang studio và bản nhúng dùng chung `web/core/`** — vật lý tóc, bộ phân loại
 nguyên âm và phần nạp model chỉ có một cài đặt duy nhất.
 

@@ -48,6 +48,20 @@ export async function createSinger(target, options = {}) {
     renderer.domElement.style.display = 'block';
     el.appendChild(renderer.domElement);
 
+    // Ô hiển thị toạ độ. Mặc định tắt: bản nhúng trên trang thật không nên
+    // hiện thông tin gỡ lỗi trừ khi chủ trang chủ động bật.
+    let hud = null;
+    if (options.showCoords) {
+        if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+        hud = document.createElement('div');
+        hud.style.cssText = 'position:absolute;left:8px;bottom:8px;z-index:2;'
+            + 'padding:6px 9px;border-radius:6px;pointer-events:none;'
+            + 'background:rgba(10,12,18,.72);color:#cfd6e4;'
+            + 'font:11px/1.5 ui-monospace,Menlo,monospace;white-space:pre;'
+            + 'font-variant-numeric:tabular-nums;';
+        el.appendChild(hud);
+    }
+
     // Từ r155 three.js bỏ hệ số PI nhân ngầm vào cường độ đèn, nên giữ nguyên
     // con số cũ sẽ cho ra cảnh tối đi khoảng 3,14 lần.
     const L = Math.PI;
@@ -211,10 +225,31 @@ export async function createSinger(target, options = {}) {
     ro.observe(el);
     resize();
 
+    const fmt = v => (v >= 0 ? ' ' : '') + v.toFixed(2);
+
+    function view() {
+        const t = controls ? controls.target : lookAt;
+        return {
+            target: t.clone(),
+            camera: camera.position.clone(),
+            distance: camera.position.distanceTo(t),
+        };
+    }
+
+    function updateHud() {
+        if (!hud) return;
+        const v = view();
+        hud.textContent =
+            `tâm nhìn   x ${fmt(v.target.x)}  y ${fmt(v.target.y)}  z ${fmt(v.target.z)}\n`
+            + `máy quay   x ${fmt(v.camera.x)}  y ${fmt(v.camera.y)}  z ${fmt(v.camera.z)}\n`
+            + `khoảng cách ${v.distance.toFixed(2)} m   ·   ${dragMode === 'dichuyen' ? 'kéo = dời' : 'kéo = xoay'}`;
+    }
+
     function frame() {
         if (!alive) return;
         requestAnimationFrame(frame);
         const delta = clock.getDelta();
+        updateHud();
         let audio = null;
         if (playing && analyser) {
             analyser.getFloatFrequencyData(spectrum);
@@ -252,6 +287,25 @@ export async function createSinger(target, options = {}) {
         /** 'xoay' hoặc 'dichuyen' — quyết định kéo chuột trái làm gì. */
         setDragMode,
         get dragMode() { return dragMode; },
+        /** Toạ độ hiện tại: tâm nhìn, vị trí máy quay, khoảng cách. */
+        getView: view,
+        /** Bật tắt ô hiển thị toạ độ trong khung. */
+        showCoords(on) {
+            if (on && !hud) {
+                if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+                hud = document.createElement('div');
+                hud.style.cssText = 'position:absolute;left:8px;bottom:8px;z-index:2;'
+                    + 'padding:6px 9px;border-radius:6px;pointer-events:none;'
+                    + 'background:rgba(10,12,18,.72);color:#cfd6e4;'
+                    + 'font:11px/1.5 ui-monospace,Menlo,monospace;white-space:pre;'
+                    + 'font-variant-numeric:tabular-nums;';
+                el.appendChild(hud);
+            } else if (!on && hud) {
+                hud.remove();
+                hud = null;
+            }
+            return !!hud;
+        },
         destroy() {
             alive = false;
             ro.disconnect();

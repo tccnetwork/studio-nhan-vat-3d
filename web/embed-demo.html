@@ -42,7 +42,7 @@
 <script type="module">
 import { createSinger } from './embed.js';
 
-const singer = await createSinger('#slot', { autoRotate: false });
+const singer = await createSinger('#slot', { autoRotate: false, showCoords: true });
 window.singer = singer;
 
 const mk = (host, label, fn) => {
@@ -62,6 +62,12 @@ const modeHost = document.getElementById('mode');
 mk(modeHost, '🔄 Kéo để xoay', () => { singer.setDragMode('xoay'); setHint(); }).classList.add('on');
 mk(modeHost, '✥ Kéo để dời nhân vật', () => { singer.setDragMode('dichuyen'); setHint(); });
 mk(modeHost, '🎯 Về khung mặc định', () => { singer.resetView(); });
+let coordsOn = true;
+const coordsBtn = mk(modeHost, '📐 Ẩn toạ độ', () => {
+  coordsOn = !coordsOn;
+  singer.showCoords(coordsOn);
+  coordsBtn.textContent = coordsOn ? '📐 Ẩn toạ độ' : '📐 Hiện toạ độ';
+});
 setHint();
 
 singer.states.forEach(s => mk(document.getElementById('states'),
