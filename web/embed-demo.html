@@ -34,6 +34,7 @@
   <p style="font-size:13px;color:#7e879b" id="hint"></p>
   <div class="row" id="mode" style="margin:0 0 10px"></div>
   <div id="slot"></div>
+  <div class="row" id="dance"></div>
   <div class="row" id="states"></div>
   <div class="row" id="hairs"></div>
   <div class="row" id="audio"></div>
@@ -95,6 +96,8 @@ async function useFile(f) {
     return;
   }
   drop.innerHTML = 'Đang phát: <b style="color:#cfd6e4">' + r.name + '</b> — nhân vật nhảy theo nhịp.';
+  dancing = true;
+  danceBtn.textContent = '⏹ Dừng Nhảy';
   clearInterval(window.__bt);
   window.__bt = setInterval(() => {
     const b = singer.getBeat();
@@ -118,6 +121,23 @@ const coordsBtn = mk(modeHost, '📐 Ẩn toạ độ', () => {
   coordsBtn.textContent = coordsOn ? '📐 Ẩn toạ độ' : '📐 Hiện toạ độ';
 });
 setHint();
+
+// Nút tự dựng bài: nếu chỉ để nó tự bật khi phát nhạc thì người xem không có
+// cách nào tắt, mà cũng không biết là nó đang chạy. Giữ trạng thái bằng biến
+// chứ không bằng lớp CSS: mk() tự gán lớp 'on' sau mỗi cú bấm nên đọc lớp ra
+// để suy trạng thái thì luôn sai.
+const danceHost = document.getElementById('dance');
+let dancing = false, alive = true;
+const danceBtn = mk(danceHost, '💃 Nhảy Theo Nhạc', () => {
+  dancing = !dancing;
+  singer.setChoreography(dancing);
+  danceBtn.textContent = dancing ? '⏹ Dừng Nhảy' : '💃 Nhảy Theo Nhạc';
+});
+const aliveBtn = mk(danceHost, '🌬 Tắt lớp thở', () => {
+  alive = !alive;
+  singer.setAlive(alive);
+  aliveBtn.textContent = alive ? '🌬 Tắt lớp thở' : '💤 Bật lớp thở';
+});
 
 singer.states.forEach(s => mk(document.getElementById('states'),
   `${s.icon} ${s.label}`, () => singer.setState(s.clip)));

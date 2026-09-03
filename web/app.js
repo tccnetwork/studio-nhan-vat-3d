@@ -277,7 +277,11 @@ function selectAudioTrack(track) {
         audioElement.src = trackUrl(track);
         if (wasPlaying) audioElement.play().catch(() => {});
     }
+    // Bài mới có tempo khác: giữ lại lịch sử flux của bài cũ thì phải mất vài
+    // giây bộ dò mới gột hết, trong lúc đó nhân vật nhảy sai nhịp.
+    if (character) character.beat.reset();
     updateLipSyncNote();
+    updateAudioButton();
 }
 
 function updateLipSyncNote() {
@@ -764,12 +768,63 @@ function highlightState(clipName) {
     }
 }
 
-/** Giao quyền chọn động tác cho bộ dựng bài. */
-function startDancing() {
+/** Giao quyền chọn động tác cho bộ dựng bài, và bật nhạc nếu chưa bật.
+ *  Không có nhạc thì bộ dựng bài không có nhịp để bám, nên nó chỉ đặt một clip
+ *  rồi đứng đó — người bấm nút sẽ tưởng nút hỏng. */
+async function startDancing() {
     if (!character) return;
     const cb = document.getElementById('toggle-choreo');
-    if (cb && !cb.checked) return;
+    if (cb) cb.checked = true;
     character.setChoreography(true);
+    // Cập nhật nút NGAY, trước khi đụng tới âm thanh: phần âm thanh có thể chờ,
+    // còn người bấm thì phải thấy nút đổi lập tức.
+    updateDanceButton();
+    if (!isAudioPlaying && audioElement) {
+        setupAudioContext();
+        try {
+            // Chờ CÓ HẠN. resume() không bao giờ hoàn tất khi trang chưa được
+            // mở khoá, và await trần ở đây từng treo luôn cả phần cập nhật nút.
+            if (audioContext && audioContext.state !== 'running') {
+                await Promise.race([audioContext.resume(),
+                                    new Promise(r => setTimeout(r, 700))]);
+            }
+            await audioElement.play();
+            isAudioPlaying = true;
+        } catch (err) {
+            const n = document.getElementById('choreo-note');
+            if (n) n.textContent = 'Bấm thêm một lần để trình duyệt cho phát nhạc.';
+        }
+    }
+    updateAudioButton();
+    updateDanceButton();
+}
+
+function stopDancing() {
+    if (!character) return;
+    character.setChoreography(false);
+    const cb = document.getElementById('toggle-choreo');
+    if (cb) cb.checked = false;
+    updateDanceButton();
+}
+
+function updateDanceButton() {
+    const b = document.getElementById('btn-dance');
+    if (!b || !character) return;
+    const on = character.choreo.enabled;
+    b.textContent = on ? '⏹ Dừng Nhảy' : '💃 Nhảy Theo Nhạc';
+    b.style.background = on
+        ? 'linear-gradient(135deg,#475569,#64748b)'
+        : 'linear-gradient(135deg,#7c3aed,#db2777)';
+}
+
+/** Nhãn nút nhạc phải theo bài đang chọn, không đóng đinh tên một bài. */
+function updateAudioButton() {
+    const b = document.getElementById('btn-toggle-audio');
+    if (!b) return;
+    b.textContent = isAudioPlaying
+        ? ('⏹ Tắt ' + (currentTrack.label || 'nhạc'))
+        : ('🎶 Bật ' + (currentTrack.label || 'nhạc'));
+    b.style.background = isAudioPlaying ? '#e11d48' : '';
 }
 
 window.switchAnimationState = function(clipName) {
@@ -786,6 +841,7 @@ window.switchAnimationState = function(clipName) {
         character.setChoreography(false);
         const cb = document.getElementById('toggle-choreo');
         if (cb) cb.checked = false;
+        updateDanceButton();
     }
     // Character.setState lo phần hoà mềm và dừng hẳn clip cũ.
     if (!character.setState(clipName)) return;
@@ -1009,23 +1065,29 @@ function setupUIEventListeners() {
     }
 
     const btnAudio = document.getElementById('btn-toggle-audio');
-    btnAudio.addEventListener('click', () => {
+    btnAudio.addEventListener('click', async () => {
         setupAudioContext();
         if (!isAudioPlaying) {
-            audioElement.play().then(() => {
-                isAudioPlaying = true;
-                btnAudio.textContent = '⏹ Tắt Nhạc J-Pop';
-                btnAudio.style.background = '#e11d48';
-            });
+            if (audioContext && audioContext.state !== 'running') await audioContext.resume();
+            try { await audioElement.play(); isAudioPlaying = true; } catch (e) { /* bị chặn */ }
+            const cb = document.getElementById('toggle-choreo');
+            if (cb && cb.checked && character) character.setChoreography(true);
         } else {
             audioElement.pause();
             isAudioPlaying = false;
             currentVocalEnergy = 0;
             resetAllMorphs();
-            btnAudio.textContent = '🎶 Bật Nhạc J-Pop Beat';
-            btnAudio.style.background = '';
         }
+        updateAudioButton();
+        updateDanceButton();
     });
+
+    const btnDance = document.getElementById('btn-dance');
+    if (btnDance) btnDance.addEventListener('click', () => {
+        if (character && character.choreo.enabled) stopDancing();
+        else startDancing();
+    });
+    updateAudioButton();
 }
 
 function onWindowResize() {
@@ -1061,13 +1123,19 @@ function animate() {
         }
         const note = document.getElementById('choreo-note');
         if (note) {
-            note.textContent = character.choreo.enabled
-                ? (character.choreo.base
-                    ? `nền ${character.choreo.base.split('_')[0]} · tay `
-                      + (character.gesture ? character.gesture.split('_')[0] : 'nghỉ')
-                      + ` · phách ${character.choreo.beats}`
-                    : 'đang chờ dò ra nhịp bài hát…')
-                : '';
+            if (!character.choreo.enabled) {
+                note.textContent = '';
+            } else if (!isAudioPlaying) {
+                // Đừng ghi đè lời nhắc bấm lại khi trình duyệt còn chặn nhạc.
+                if (!note.textContent) note.textContent = 'bật nhạc để nhân vật bám nhịp';
+            } else if (character.beat.bpm > 0) {
+                note.textContent = `${character.beat.bpm.toFixed(0)} phách/phút · nền `
+                    + `${String(character.choreo.base).split('_')[0]} · tay `
+                    + (character.gesture ? character.gesture.split('_')[0] : 'nghỉ')
+                    + ` · phách ${character.choreo.beats}`;
+            } else {
+                note.textContent = 'đang nghe để dò nhịp bài hát…';
+            }
         }
     }
 
