@@ -799,6 +799,7 @@ function initHairPhysicsColliders(model) {
 // tóc giữ vị trí chóp ở frame trước, mỗi bước lấy quán tính cộng lực kéo về tư
 // thế nghỉ cộng trọng lực, rồi ép chóp về đúng bán kính của đốt.
 // ==========================================
+const STATE_FADE = 0.25;           // giây hoà giữa hai trạng thái
 const HAIR_STEP = 1 / 60;          // bước cố định, cho kết quả không đổi theo fps
 const HAIR_DRAG = 0.38;            // hãm quán tính
 const HAIR_STIFFNESS = 0.055;      // lực kéo về tư thế nghỉ
@@ -937,8 +938,18 @@ window.switchAnimationState = function(clipName) {
     }
 
     if (nextAction === currentAction) return;
-    if (currentAction) currentAction.fadeOut(0.25);
-    nextAction.reset().fadeIn(0.25).play();
+
+    // fadeOut chỉ hạ trọng số về 0 chứ không dừng action: nó vẫn được mixer
+    // tính lại mỗi frame, mãi mãi. Đổi qua đủ 18 trạng thái là 18 action cùng
+    // chạy. Hẹn dừng hẳn khi hoà xong, trừ khi người dùng quay lại đúng nó.
+    const prev = currentAction;
+    if (prev) {
+        prev.fadeOut(STATE_FADE);
+        setTimeout(() => {
+            if (currentAction !== prev) prev.stop();
+        }, STATE_FADE * 1000 + 60);
+    }
+    nextAction.reset().fadeIn(STATE_FADE).play();
     currentAction = nextAction;
     currentActionName = clipName;
     updateAnimationHUD(clipName);

@@ -50,8 +50,10 @@ STATES = [
          label='Dẫn Chuyện (Mocap)', desc='Cử chỉ dẫn chuyện, retarget từ mocap'),
 ]
 
-# Clip điều khiển blendshape khuôn mặt, chạy song song với trạng thái cơ thể
-FACE_CLIP = 'FaceAction'
+# Không có clip khuôn mặt: biểu cảm do trình xem điều khiển lúc chạy, xem chú
+# thích trong scripts/build_character.py. Để lại None để verify_build coi mọi
+# clip ngoài danh mục là sai lệch thật.
+FACE_CLIP = None
 
 # key phải khớp với tên biến trong trình xem; mesh phải khớp tên object Blender
 HAIRSTYLES = [

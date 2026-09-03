@@ -48,7 +48,6 @@ def write_manifest(path, model_file, source_file, actions):
         'generated': datetime.datetime.now().replace(microsecond=0).isoformat(),
         'model': model_file,
         'source': source_file,
-        'faceClip': catalog.FACE_CLIP if catalog.FACE_CLIP in by_name else None,
         'defaultState': states[0]['clip'],
         'states': states,
         'hairstyles': [dict(h) for h in catalog.HAIRSTYLES],

@@ -384,31 +384,14 @@ def build_character(wanted_states=None, fast=False):
     # =========================================================================
     hairstyles.build_hairstyles(char_arm)
 
-    # Facial Blendshapes
-    face_obj = None
-    for obj in bpy.data.objects:
-        if obj.type == 'MESH' and 'face' in obj.name.lower() and obj.data.shape_keys:
-            face_obj = obj
-            break
-            
-    if face_obj and face_obj.data.shape_keys:
-        kb = face_obj.data.shape_keys.key_blocks
-        face_obj.data.shape_keys.animation_data_create()
-        vowels = ['Face_Blendshape.Fcl_MTH_A', 'Face_Blendshape.Fcl_MTH_I', 'Face_Blendshape.Fcl_MTH_U', 'Face_Blendshape.Fcl_MTH_O', 'Face_Blendshape.Fcl_MTH_E']
-        for frame in range(1, 121):
-            cycle_idx = int((frame / 16.0)) % 5
-            mouth_open = max(0.0, math.sin((frame / 30.0) * math.pi * 6.0)) * 0.95
-            is_wink = (40 <= frame <= 55) or (90 <= frame <= 105)
-            for i, v_name in enumerate(vowels):
-                if v_name in kb:
-                    kb[v_name].value = mouth_open if i == cycle_idx else 0.0
-                    kb[v_name].keyframe_insert(data_path="value", frame=frame)
-            if 'Face_Blendshape.Fcl_ALL_Joy' in kb:
-                kb['Face_Blendshape.Fcl_ALL_Joy'].value = 0.55 + 0.25 * math.sin((frame / 120.0) * math.pi * 4.0)
-                kb['Face_Blendshape.Fcl_ALL_Joy'].keyframe_insert(data_path="value", frame=frame)
-            if 'Face_Blendshape.Fcl_EYE_Close_L' in kb:
-                kb['Face_Blendshape.Fcl_EYE_Close_L'].value = 1.0 if is_wink else 0.0
-                kb['Face_Blendshape.Fcl_EYE_Close_L'].keyframe_insert(data_path="value", frame=frame)
+    # Khuôn mặt KHÔNG được bake vào clip. Trước đây quy trình dựng tạo một clip
+    # "FaceAction" 120 frame nhép nguyên âm — nhưng trình xem chưa từng phát nó:
+    # toàn bộ biểu cảm, chớp mắt, nháy mắt và nhép miệng đều do
+    # updateFacialAnimation() trong web/app.js điều khiển lúc chạy, và bản chạy
+    # đó còn bám theo sóng âm thật. Hai bên cùng ghi vào morphTargetInfluences
+    # thì chỉ tổ tranh nhau. Người mở file trong Blender vẫn có đủ 57 shape key
+    # để tự dựng biểu cảm.
+
 
     MODEL_NAME = "female_singer_anime_idol"
     stem = f"{out_b_dir}/{MODEL_NAME}"
