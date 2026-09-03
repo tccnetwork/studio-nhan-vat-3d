@@ -109,6 +109,12 @@ export class HairPhysics {
 
             // Đốt tóc không co giãn: chóp luôn nằm trên mặt cầu bán kính len
             next.sub(head).setLength(sp.len).add(head);
+            // Một giá trị NaN lọt vào sẽ lan ra cả bộ xương mà không báo gì.
+            // Gặp thì đưa đốt tóc về tư thế nghỉ rồi chạy tiếp.
+            if (!Number.isFinite(next.x + next.y + next.z)) {
+                next.copy(head).addScaledVector(restDir, sp.len);
+                sp.prevTip.copy(next);
+            }
 
             for (const col of cols) {
                 const d = next.distanceTo(col.center);
@@ -121,12 +127,17 @@ export class HairPhysics {
 
             // Xoay đốt tóc để nó chỉ về chóp mới, tính trong không gian thế giới
             const curDir = sp.child.getWorldPosition(_v2).sub(head);
-            if (curDir.lengthSq() > 1e-10) {
-                _q2.setFromUnitVectors(curDir.normalize(),
-                                       _v3.subVectors(next, head).normalize());
+            const tgtDir = _v3.subVectors(next, head);
+            if (curDir.lengthSq() > 1e-10 && tgtDir.lengthSq() > 1e-10) {
+                _q2.setFromUnitVectors(curDir.normalize(), tgtDir.normalize());
                 bone.parent.getWorldQuaternion(_q1);
                 _qi.copy(_q1).invert();
                 bone.quaternion.premultiply(_q1).premultiply(_q2).premultiply(_qi);
+                // BẮT BUỘC chuẩn hoá lại. Mỗi bước nhân chồng ba quaternion, sai
+                // số dấu phẩy động dồn lại làm |q| lệch khỏi 1 — mà ma trận xoay
+                // sinh từ quaternion nhân tỉ lệ theo |q|². Không chuẩn hoá thì
+                // sau 100 giây |q| lên tới hàng tỉ và tóc phình kín màn hình.
+                bone.quaternion.normalize();
                 bone.updateMatrixWorld(true);
             }
 

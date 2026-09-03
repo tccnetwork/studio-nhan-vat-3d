@@ -230,7 +230,13 @@ dữ liệu hoạt ảnh chỉ để lưu xương tóc, và mỗi module trạng
 cùng một đoạn rủ tóc. Nay tóc phản ứng với chuyển động thật nên nó cũng đúng cả
 trong lúc chuyển tiếp giữa hai trạng thái — điều bản bake cứng không làm được.
 
-Bốn hằng số ở đầu `web/app.js`: `HAIR_DRAG` (hãm quán tính), `HAIR_STIFFNESS`
+Quaternion của mỗi đốt tóc **phải được chuẩn hoá lại sau mỗi bước**. Mỗi bước
+nhân chồng ba quaternion, sai số dấu phẩy động dồn lại làm `|q|` lệch khỏi 1 —
+mà ma trận xoay sinh từ quaternion nhân tỉ lệ theo `|q|²`. Đo được: không chuẩn
+hoá thì sau 6.000 bước (100 giây) `|q|` lên tới **2,3 tỉ** và tóc phình kín màn
+hình; có chuẩn hoá thì đứng yên ở 1,000000.
+
+Bốn hằng số ở đầu `web/core/hair.js`: `HAIR_DRAG` (hãm quán tính), `HAIR_STIFFNESS`
 (lực kéo về tư thế nghỉ), `HAIR_GRAVITY` (độ trĩu), `HAIR_RADIUS` (bán kính lọn
 tóc khi va chạm). Mô phỏng chạy ở bước cố định 1/60 giây nên kết quả không đổi
 theo tốc độ khung hình.
