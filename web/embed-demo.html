@@ -82,7 +82,18 @@ const beatOut = document.getElementById('beat');
 async function useFile(f) {
   if (!f) return;
   drop.style.borderColor = '#4d7fd6';
-  const r = await singer.playFile(f);
+  drop.innerHTML = 'Đang mở <b style="color:#cfd6e4">' + f.name + '</b>…';
+  let r;
+  try {
+    r = await singer.playFile(f);
+  } catch (err) {
+    // Không nuốt lỗi: nếu trình duyệt chặn phát tự động thì phải mời người dùng
+    // bấm một cái, vì chỉ cú bấm thật mới mở khoá được âm thanh.
+    drop.innerHTML = 'Chưa phát được (' + err.message + ') '
+      + '<button id="retry" style="margin-top:6px">▶ Bấm để phát</button>';
+    document.getElementById('retry').addEventListener('click', () => useFile(f));
+    return;
+  }
   drop.innerHTML = 'Đang phát: <b style="color:#cfd6e4">' + r.name + '</b> — nhân vật nhảy theo nhịp.';
   clearInterval(window.__bt);
   window.__bt = setInterval(() => {

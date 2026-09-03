@@ -832,26 +832,94 @@ function setupUIEventListeners() {
     const songDrop = document.getElementById('song-drop');
     const beatNote = document.getElementById('beat-note');
     let uploadedUrl = null;
+    // Chrome chỉ cho AudioContext chạy khi trang đã có thao tác bấm thật. Sự
+    // kiện 'change' của ô chọn file KHÔNG được tính là thao tác đó, còn kích
+    // hoạt tạm thời từ cú bấm mở hộp thoại thì đã hết hạn trong lúc người dùng
+    // ngồi duyệt file. Nên nếu đợi tới lúc chọn xong file mới mở khoá thì
+    // resume() treo vĩnh viễn: thẻ audio đứng im, không lỗi, không thông báo —
+    // đúng cảnh "chọn mp3 mà nhạc không chạy". Vì vậy mở khoá ngay ở cú bấm
+    // đầu tiên trên trang, tức là chính cú bấm mở hộp thoại chọn file.
+    function unlockAudio() {
+        if (!audioElement) return;
+        setupAudioContext();
+        if (audioContext && audioContext.state === 'running') {
+            window.removeEventListener('pointerdown', unlockAudio, true);
+            window.removeEventListener('keydown', unlockAudio, true);
+        }
+    }
+    window.addEventListener('pointerdown', unlockAudio, true);
+    window.addEventListener('keydown', unlockAudio, true);
+
+    function offerManualPlay(msg, file) {
+        songDrop.innerHTML = msg
+            + '<br><button id="song-retry" class="btn" style="margin-top:6px;font-size:11px;padding:5px 9px;">▶ Bấm để phát</button>';
+        const retry = document.getElementById('song-retry');
+        if (!retry) return;
+        retry.addEventListener('click', async () => {
+            try {
+                // Cú bấm này là thao tác thật nên resume() chắc chắn xong.
+                if (audioContext && audioContext.state !== 'running') await audioContext.resume();
+                await audioElement.play();
+                afterSongStarted(file);
+            } catch (e) { songDrop.textContent = 'Vẫn không phát được: ' + e.message; }
+        });
+    }
+
+    function afterSongStarted(file) {
+        isAudioPlaying = true;
+        const btn = document.getElementById('btn-toggle-audio');
+        if (btn) btn.textContent = '⏸ Tắt Nhạc';
+        songDrop.innerHTML = 'Đang phát: <b style="color:#e2e8f0">' + file.name + '</b>';
+        const dance = manifest.states.filter(s => s.dance);
+        if (dance.length) switchAnimationState(dance[0].clip);
+    }
+
     async function useSong(file) {
-        if (!file || !audioElement) return;
+        if (!file) return;
+        if (!audioElement) setupAudioElement();
         setupAudioContext();
         if (uploadedUrl) URL.revokeObjectURL(uploadedUrl);
         uploadedUrl = URL.createObjectURL(file);
         audioElement.src = uploadedUrl;
+        audioElement.load();
         // Bài người dùng tự tải lên mặc định coi là CÓ lời: người tải biết rõ
         // hơn mọi phép đoán từ tín hiệu — xem chú thích trong scripts/catalog.py.
         currentTrack = { file: file.name, label: file.name, vocals: true };
         if (character) character.beat.reset();
         updateLipSyncNote();
+        songDrop.innerHTML = 'Đang mở <b style="color:#e2e8f0">' + file.name + '</b>…';
         try {
+            // Chờ context nhưng CÓ HẠN: khi trang chưa được mở khoá, resume()
+            // không bao giờ hoàn tất, và await trần sẽ nuốt luôn cả thông báo.
+            if (audioContext && audioContext.state !== 'running') {
+                await Promise.race([
+                    audioContext.resume(),
+                    new Promise(res => setTimeout(res, 700)),
+                ]);
+            }
+            if (audioElement.readyState < 2) {
+                await new Promise(res => {
+                    const done = () => res();
+                    audioElement.addEventListener('canplay', done, { once: true });
+                    audioElement.addEventListener('error', done, { once: true });
+                    setTimeout(done, 8000);
+                });
+            }
+            if (audioElement.error) {
+                songDrop.textContent = 'Không đọc được file này (mã lỗi '
+                    + audioElement.error.code + '). Hãy thử file mp3/m4a/wav khác.';
+                return;
+            }
             await audioElement.play();
-            isAudioPlaying = true;
-            document.getElementById('btn-toggle-audio').textContent = '⏸ Tắt Nhạc';
-            songDrop.innerHTML = 'Đang phát: <b style="color:#e2e8f0">' + file.name + '</b>';
-            const dance = manifest.states.filter(s => s.dance);
-            if (dance.length) switchAnimationState(dance[0].clip);
+            // Thẻ audio chạy nhưng context còn treo thì hoàn toàn không ra
+            // tiếng, vì cả đồ thị âm thanh đi qua context này.
+            if (audioContext && audioContext.state !== 'running') {
+                offerManualPlay('Trình duyệt chưa cho phát tự động.', file);
+                return;
+            }
+            afterSongStarted(file);
         } catch (err) {
-            songDrop.textContent = 'Không phát được file này: ' + err.message;
+            offerManualPlay('Trình duyệt chặn phát tự động (' + err.name + ').', file);
         }
     }
     if (songDrop) {

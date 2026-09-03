@@ -152,6 +152,22 @@ export async function createSinger(target, options = {}) {
         }
     }
 
+    // Chrome chỉ cho AudioContext chạy sau một thao tác bấm thật. Sự kiện
+    // 'change' của ô chọn file KHÔNG tính là thao tác đó, còn kích hoạt tạm
+    // thời từ cú bấm mở hộp thoại đã hết hạn trong lúc người dùng duyệt file.
+    // Mở khoá ngay ở cú bấm đầu tiên trên trang thì tới lúc chọn xong file
+    // context đã sẵn sàng.
+    function unlockAudio() {
+        ensureGraph();
+        if (audioCtx.state === 'running') removeUnlock();
+    }
+    function removeUnlock() {
+        window.removeEventListener('pointerdown', unlockAudio, true);
+        window.removeEventListener('keydown', unlockAudio, true);
+    }
+    window.addEventListener('pointerdown', unlockAudio, true);
+    window.addEventListener('keydown', unlockAudio, true);
+
     function ensureAudio(file) {
         const tracks = character.manifest.audioTracks || [];
         track = tracks.find(t => t.file === file) || tracks.find(t => t.default) || tracks[0];
@@ -237,10 +253,44 @@ export async function createSinger(target, options = {}) {
             if (uploadedUrl) URL.revokeObjectURL(uploadedUrl);
             uploadedUrl = URL.createObjectURL(file);
             audioEl.src = uploadedUrl;
+            audioEl.load();
             track = { file: file.name || 'tải lên', label: file.name || 'tải lên', vocals };
             character.beat.reset();
-            if (audioCtx.state === 'suspended') await audioCtx.resume();
+            // Phải CHỜ context chạy lại trước khi phát. Không chờ thì đồ thị âm
+            // thanh vẫn đang dừng, media element chạy nhưng không ra tiếng —
+            // đúng kiểu "chọn file mà nhạc không tự chạy".
+            // Chờ CÓ HẠN: trang chưa mở khoá thì resume() không bao giờ xong,
+            // await trần sẽ treo im lặng và nuốt luôn cả thông báo lỗi.
+            if (audioCtx.state !== 'running') {
+                await Promise.race([audioCtx.resume(),
+                                    new Promise(res => setTimeout(res, 700))]);
+            }
+            // Chờ trình duyệt giải mã đủ để phát, nếu không play() có thể bị
+            // huỷ ngay khi src vừa đổi.
+            if (audioEl.readyState < 2) {
+                await new Promise(res => {
+                    const done = () => { cleanup(); res(); };
+                    const cleanup = () => {
+                        audioEl.removeEventListener('canplay', done);
+                        audioEl.removeEventListener('error', done);
+                    };
+                    audioEl.addEventListener('canplay', done, { once: true });
+                    audioEl.addEventListener('error', done, { once: true });
+                    setTimeout(done, 4000);
+                });
+            }
+            if (audioEl.error) {
+                throw new Error('không giải mã được file này (mã lỗi '
+                                + audioEl.error.code + ')');
+            }
             await audioEl.play();
+            // Thẻ audio chạy nhưng context còn treo thì không ra tiếng, vì cả
+            // đồ thị âm thanh đi qua context này.
+            if (audioCtx.state !== 'running') {
+                const e = new Error('trình duyệt chưa cho phát tự động — cần một cú bấm');
+                e.name = 'NotAllowedError';
+                throw e;
+            }
             playing = true;
             if (dance) {
                 const d = character.danceStates;
@@ -306,6 +356,7 @@ export async function createSinger(target, options = {}) {
             return !!hud;
         },
         destroy() {
+            removeUnlock();
             alive = false;
             ro.disconnect();
             if (audioEl) audioEl.pause();
