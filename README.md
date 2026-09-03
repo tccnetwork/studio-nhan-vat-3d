@@ -305,7 +305,24 @@ Một lượt mất khoảng một phút và render 12 ảnh: bốn kiểu tóc,
 Nó dùng chung `scripts/hairstyles.py` với quy trình dựng thật nên hình ra là
 hình thật, không phải bản mô phỏng riêng.
 
-Ba tham số của mỗi kiểu: `z_back` / `z_side` là cao độ kết thúc của vạt sau và
+Tham số của cả ba kiểu nằm trong bảng `STYLES` ở đầu file. Đo độ gọn của đường
+cắt bằng:
+
+```bash
+$BL --background --factory-startup --python tools/hair_hem.py
+```
+
+Nó chia vành tóc theo góc quanh đầu, lấy cao độ thấp nhất mỗi ô rồi đo chênh
+lệch giữa các ô kề nhau — cách nói bằng số cho cái mà mắt gọi là "răng cưa".
+Kiểu tóc dài gốc của VRoid dùng làm mốc.
+
+Một kết quả đáng lưu: tính theo tỉ lệ trên chính độ dài, ba kiểu cắt **không hề
+lởm chởm hơn tóc gốc** (khoảng 9–10% ở cả bốn). Nhưng cùng một tỉ lệ đọc ra rất
+khác nhau: 10% trên 49 cm tóc dài là "tỉa layer", còn 10% trên 21 cm tóc bob thì
+vành tóc nằm sát cổ nên thành "răng cưa". Vì thế tóc càng ngắn `evenness` càng
+phải nhỏ.
+
+Bốn tham số của mỗi kiểu: `z_back` / `z_side` là cao độ kết thúc của vạt sau và
 vạt bên, `u_curve_depth` là độ cong chữ U của đường cắt sau lưng, và `hang`
 điều khiển mức xoè còn giữ lại — tóc càng ngắn thì càng phải rơi thẳng, vì nó
 không với tới vai nên không có gì đẩy nó ra ngoài.

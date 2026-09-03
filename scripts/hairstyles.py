@@ -6,6 +6,26 @@ bake lại toàn bộ 14 trạng thái hoạt ảnh — xem tools/preview_hairst
 import bpy
 import mathutils
 
+# Tham số của từng kiểu tóc, để ở đây thay vì rải trong hàm để tools/hair_hem.py
+# quét thử được nhiều giá trị mà không phải sửa mã.
+#
+#   z_back / z_side  cao độ kết thúc của vạt sau lưng và vạt hai bên. z_side
+#                    thấp hơn z_back cho dáng A-line, và che kín khe trước tai.
+#   u_curve_depth    độ cong chữ U của đường cắt sau lưng.
+#   hang             mức xoè còn giữ lại; tóc ngắn không với tới vai nên phải
+#                    rơi thẳng hơn.
+#   evenness         làm đều đường cắt. Tóc càng ngắn càng cần nhỏ: vành tóc
+#                    nằm sát cổ nên cùng một độ so le đọc ra lởm chởm hơn hẳn
+#                    so với khi nó nằm giữa lưng.
+STYLES = [
+    dict(name='Hair_ShortBob', z_back=1.300, z_side=1.292,
+         u_curve_depth=0.026, hang=0.15, evenness=0.42),
+    dict(name='Hair_MediumShoulder', z_back=1.198, z_side=1.192,
+         u_curve_depth=0.036, hang=0.35, evenness=0.58),
+    dict(name='Hair_WavyCurled', z_back=1.140, z_side=1.136,
+         u_curve_depth=0.044, hang=0.55, evenness=0.72),
+]
+
 
 def build_hairstyles(char_arm):
     """Tạo 3 kiểu tóc cắt ngắn từ object 'Hair'. Trả về danh sách object mới."""
@@ -179,19 +199,10 @@ def build_hairstyles(char_arm):
             return new_hair
 
         # Kiểu 4 trên giao diện — Bob ngắn ôm gáy
-        # z_side thấp hơn z_back một chút: vạt trước dài hơn vạt sau (dáng A-line).
-        # Ngoài chuyện đúng kiểu, nó còn che kín khe hở trước tai — chỗ mà bản
-        # trước để lộ cổ vì vạt bên bị cắt cao hơn vạt sau 3,5 cm.
-        create_tapered_hairstyle(1.300, 1.292, 'Hair_ShortBob',
-                                 u_curve_depth=0.026, hang=0.15, evenness=0.68)
-
-        # Kiểu 3 — Ngang vai
-        create_tapered_hairstyle(1.198, 1.192, 'Hair_MediumShoulder',
-                                 u_curve_depth=0.036, hang=0.35, evenness=0.80)
-
-        # Kiểu 2 — Dài vừa
-        create_tapered_hairstyle(1.140, 1.136, 'Hair_WavyCurled',
-                                 u_curve_depth=0.044, hang=0.55, evenness=0.90)
+        for st in STYLES:
+            create_tapered_hairstyle(st['z_back'], st['z_side'], st['name'],
+                                     u_curve_depth=st['u_curve_depth'],
+                                     hang=st['hang'], evenness=st['evenness'])
 
         print(">>> Multi-Hairstyle Collection Created Successfully with Salon-Grade U-Silhouette & 3D Contour!")
 
