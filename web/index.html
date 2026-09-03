@@ -62,6 +62,12 @@
                 <label>Tự động xoay Camera:</label>
                 <input type="checkbox" id="toggle-autorotate">
             </div>
+            <p class="sub-hint" id="drag-hint" style="margin-top:6px;"></p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
+                <button id="btn-drag-rotate" class="btn active" style="font-size:12px;padding:7px 8px;">🔄 Kéo để xoay</button>
+                <button id="btn-drag-move" class="btn" style="font-size:12px;padding:7px 8px;">✥ Kéo để dời</button>
+                <button id="btn-view-reset" class="btn" style="grid-column:1 / -1;font-size:12px;padding:7px 8px;">🎯 Về khung mặc định</button>
+            </div>
         </div>
 
         <div class="card" style="border: 2px solid #c084fc; background: rgba(30, 27, 75, 0.85); box-shadow: 0 0 15px rgba(192, 132, 252, 0.25);">

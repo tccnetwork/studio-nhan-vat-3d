@@ -7,7 +7,8 @@ trình xem chạy thẳng trên trình duyệt và một bản nhúng được v
 ```
 source/     Model nguồn — CHỈ ĐỌC. Không script nào được ghi vào đây.
 build/      Kết quả dựng (glb / fbx / blend / manifest.json). Dựng lại là có.
-web/        core/     lõi dùng chung: nạp model, vật lý tóc, khẩu hình
+web/        core/     lõi dùng chung: nạp model, vật lý tóc, khẩu hình,
+                      điều khiển khung hình
             embed.js  bản nhúng vào trang khác — API công khai
             app.js    trang studio, dùng cùng lõi đó
             vendor/   bộ giải nén Draco để sẵn, không cần mạng
@@ -208,7 +209,11 @@ thật không nên hiện thông tin gỡ lỗi. Bật tắt lúc chạy bằng
 tự vẽ chỗ khác.
 
 **Trang studio và bản nhúng dùng chung `web/core/`** — vật lý tóc, bộ phân loại
-nguyên âm và phần nạp model chỉ có một cài đặt duy nhất.
+nguyên âm, phần nạp model và điều khiển khung hình chỉ có một cài đặt duy nhất.
+Trang studio từng để pan mặc định của OrbitControls nên dính đúng lỗi trên:
+dời nhân vật là tâm xoay rời khỏi nó. Nay cả hai trang dùng `core/framing.js`.
+Riêng studio, tâm xoay còn dời theo nút cận cảnh — xoay quanh khuôn mặt là quay
+quanh khuôn mặt thật, không quanh giữa người.
 
 ## Khẩu hình
 

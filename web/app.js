@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Character } from './core/character.js';
 import { selfTest as vowelSelfTest } from './core/lipsync.js';
+import { FrameController } from './core/framing.js';
 
 // Bộ giải nén Draco để ngay trong dự án thay vì lấy từ CDN: trang tải được
 // khi không có mạng, và thời gian tải không còn phụ thuộc độ trễ của CDN.
@@ -25,6 +26,7 @@ let stateByClip = {};      // ten clip -> muc trong manifest
 
 let scene, camera, renderer, controls, clock;
 let character = null;
+let framing = null;
 let characterModel = null, morphMeshes = [], mixer = null;
 let skeletonHelper = null;
 let particlesSystem;
@@ -127,8 +129,19 @@ function init() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.maxPolarAngle = Math.PI / 2 + 0.02;
+    controls.minDistance = 0.4;
+    controls.maxDistance = 12;
     controls.target.set(0, 1.1, 0);
     controls.update();
+
+    // Cùng module với bản nhúng: tâm xoay luôn ở nhân vật, dời nhân vật bằng
+    // dịch khung ảnh. Trước đây trang này để pan mặc định của OrbitControls,
+    // nên dời nhân vật là tâm xoay rời khỏi nó và xoay thì nhân vật văng vòng
+    // quanh một điểm ở xa.
+    framing = new FrameController({
+        camera, controls, element: container, canvas: renderer.domElement,
+        pivot: new THREE.Vector3(0, 1.1, 0),
+    });
 
     setupLighting();
     setupStage();
@@ -743,39 +756,21 @@ window.switchAnimationState = function(clipName) {
 };
 
 function setCameraView(view) {
-    document.querySelectorAll('.btn-cam').forEach(b => b.classList.remove('active'));
     const btn = document.getElementById(`cam-${view}`);
+    document.querySelectorAll('.btn-cam').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-
-    if (view === 'full') {
-        controls.target.set(0, 1.1, 0);
-        camera.position.set(0, 1.45, 3.0);
-    } else if (view === 'face') {
-        controls.target.set(0, 1.45, 0);
-        camera.position.set(0, 1.50, 0.95);
-    } else if (view === 'hand') {
-        controls.target.set(-0.35, 1.05, 0.1);
-        camera.position.set(-0.35, 1.10, 0.65);
-    }
-    controls.update();
-}
-
-function applyMorph(targetIndex, value) {
-    morphMeshes.forEach(mesh => {
-        if (mesh.morphTargetInfluences && mesh.morphTargetInfluences.length > targetIndex) {
-            mesh.morphTargetInfluences[targetIndex] = value;
-        }
-    });
-}
-
-function resetAllMorphs() {
-    morphMeshes.forEach(mesh => {
-        if (mesh.morphTargetInfluences) {
-            for (let i = 0; i < mesh.morphTargetInfluences.length; i++) {
-                mesh.morphTargetInfluences[i] = 0;
-            }
-        }
-    });
+    if (!framing) return;
+    // Cận cảnh thì tâm xoay dời sang chính bộ phận đang xem, nhờ vậy xoay quanh
+    // khuôn mặt là quay quanh khuôn mặt chứ không quanh giữa người.
+    const preset = {
+        full: { pivot: [0, 1.1, 0], distance: 3.0 },
+        face: { pivot: [0, 1.45, 0], distance: 0.85 },
+        hand: { pivot: [-0.35, 1.05, 0.1], distance: 0.6 },
+    }[view] || { pivot: [0, 1.1, 0], distance: 3.0 };
+    framing.offset.x = 0;
+    framing.offset.y = 0;
+    framing.apply();
+    framing.setPivot(new THREE.Vector3(...preset.pivot), preset.distance);
 }
 
 function setupUIEventListeners() {
@@ -799,6 +794,26 @@ function setupUIEventListeners() {
             }
         });
     });
+
+    const dragHint = document.getElementById('drag-hint');
+    const rotBtn = document.getElementById('btn-drag-rotate');
+    const movBtn = document.getElementById('btn-drag-move');
+    const setDrag = (mode) => {
+        if (!framing) return;
+        framing.setDragMode(mode);
+        const moving = mode === 'dichuyen';
+        rotBtn.classList.toggle('active', !moving);
+        movBtn.classList.toggle('active', moving);
+        dragHint.textContent = moving
+            ? 'Kéo chuột trái để DỜI nhân vật trong khung · chuột phải để xoay.'
+            : 'Kéo chuột trái để XOAY quanh nhân vật · chuột phải cũng xoay.';
+    };
+    rotBtn.addEventListener('click', () => setDrag('xoay'));
+    movBtn.addEventListener('click', () => setDrag('dichuyen'));
+    document.getElementById('btn-view-reset').addEventListener('click', () => {
+        if (framing) framing.reset(3.0);
+    });
+    setDrag('xoay');
 
     document.getElementById('toggle-autorotate').addEventListener('change', (e) => {
         controls.autoRotate = e.target.checked;
@@ -834,6 +849,7 @@ function setupUIEventListeners() {
 }
 
 function onWindowResize() {
+    if (framing) framing.apply();
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);

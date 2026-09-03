@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Character } from './core/character.js';
+import { FrameController } from './core/framing.js';
 
 const HERE = new URL('./', import.meta.url);
 
@@ -82,8 +83,6 @@ export async function createSinger(target, options = {}) {
     character.setState(options.state ?? character.manifest.defaultState, 0);
     if (options.hairstyle) character.setHairstyle(options.hairstyle);
 
-    let userMoved = false;
-    let dragMode = options.dragMode ?? 'xoay';
     let controls = null;
     if (opts.controls) {
         controls = new OrbitControls(camera, renderer.domElement);
@@ -98,8 +97,6 @@ export async function createSinger(target, options = {}) {
         controls.enablePan = false;
         controls.minDistance = 0.4;
         controls.maxDistance = 12;
-        // Người dùng đã tự đặt góc nhìn thì đừng kéo họ về chỗ cũ nữa.
-        controls.addEventListener('start', () => { userMoved = true; });
     }
     // Khung hình tính từ hộp bao thật thay vì đặt cứng khoảng cách: khung chủ
     // nhà cao thấp rộng hẹp thế nào cũng phải thấy trọn nhân vật.
@@ -108,136 +105,21 @@ export async function createSinger(target, options = {}) {
     const lookAt = options.lookAt
         ? new THREE.Vector3(...options.lookAt)
         : box.getCenter(new THREE.Vector3());
-    setDragMode(dragMode);
     // Hộp bao của lưới có xương lấy theo tư thế bind, tức là hai tay dang ngang
     // nên rộng hơn nhân vật đang đứng nhiều. Dùng chiều cao làm chuẩn, chiều
     // ngang chỉ lấy một phần để không bị lùi ra quá xa.
     const shownWidth = Math.min(size.x, size.y * 0.55);
 
-    // Dời nhân vật trong khung KHÔNG được đụng tới tâm xoay.
-    //
-    // Thao tác pan của OrbitControls dịch cả tâm xoay lẫn máy quay. Dời nhân
-    // vật một chút là tâm xoay rời khỏi nhân vật, rồi xoay thì nhân vật văng
-    // vòng quanh một điểm ở xa — đúng hiện tượng chủ dự án gặp. Hai bản chốt
-    // trước của tôi chỉ giới hạn tâm xoay đi bao xa, tức là chữa triệu chứng.
-    //
-    // Ở đây tâm xoay bị khoá cứng vào nhân vật (pan của OrbitControls tắt hẳn),
-    // còn việc dời nhân vật làm bằng camera.setViewOffset — dịch khung ảnh chứ
-    // không dịch máy quay. Xoay vì thế luôn quay quanh nhân vật, ở mọi lúc.
-    const KEEP = options.keepInside ?? 0.18;   // lề tối thiểu quanh khung, 0..0.5
-    const frameOffset = { x: 0, y: 0 };        // pixel
-    const _probe = new THREE.Vector3();
-
-    function applyFrameOffset() {
-        const w = el.clientWidth || 1, h = el.clientHeight || 1;
-        const maxX = (0.5 - KEEP) * w, maxY = (0.5 - KEEP) * h;
-        frameOffset.x = THREE.MathUtils.clamp(frameOffset.x, -maxX, maxX);
-        frameOffset.y = THREE.MathUtils.clamp(frameOffset.y, -maxY, maxY);
-        if (frameOffset.x === 0 && frameOffset.y === 0) camera.clearViewOffset();
-        else camera.setViewOffset(w, h, -frameOffset.x, -frameOffset.y, w, h);
-    }
-
-    /** Nhân vật đang nằm đâu trên khung, tính bằng phần trăm. 50/50 là giữa.
-     *
-     *  Đo bằng phép chiếu thật qua ma trận của máy quay, KHÔNG suy ra từ biến
-     *  frameOffset. Suy ra từ biến nội bộ là tự soi lại chính mình: nếu biến đó
-     *  lệch với thứ đang hiển thị thì con số vẫn đẹp mà vẫn sai. */
-    function screenPos() {
-        camera.updateMatrixWorld();
-        _probe.copy(lookAt).project(camera);
-        return { x: _probe.x * 50 + 50, y: 50 - _probe.y * 50 };
-    }
-
-    // --- kéo để dời: tự xử lý, không mượn pan của OrbitControls ---
-    let dragging = false, lastX = 0, lastY = 0;
-    renderer.domElement.addEventListener('pointerdown', e => {
-        if (dragMode !== 'dichuyen' || e.button !== 0) return;
-        dragging = true; userMoved = true;
-        lastX = e.clientX; lastY = e.clientY;
-        renderer.domElement.setPointerCapture(e.pointerId);
-        e.preventDefault();
+    // Toàn bộ phần xoay / dời khung / chốt giữ nhân vật nằm ở core/framing.js —
+    // trang studio dùng chung đúng module đó, nên không có hai bản cài đặt để
+    // lệch nhau.
+    const frame_ = new FrameController({
+        camera, controls, element: el, canvas: renderer.domElement,
+        pivot: lookAt,
+        keepInside: options.keepInside ?? 0.18,
+        azimuth: options.azimuth ?? -0.079,
+        polar: options.polar ?? 1.486,
     });
-    renderer.domElement.addEventListener('pointermove', e => {
-        if (!dragging) return;
-        frameOffset.x += e.clientX - lastX;
-        frameOffset.y += e.clientY - lastY;
-        lastX = e.clientX; lastY = e.clientY;
-        applyFrameOffset();
-    });
-    const endDrag = e => {
-        if (!dragging) return;
-        dragging = false;
-        try { renderer.domElement.releasePointerCapture(e.pointerId); } catch (_) {}
-    };
-    renderer.domElement.addEventListener('pointerup', endDrag);
-    renderer.domElement.addEventListener('pointercancel', endDrag);
-
-    /** 'xoay' — kéo trái để xoay quanh nhân vật (mặc định).
-     *  'dichuyen' — kéo trái để dời nhân vật trong khung, xoay chuyển sang chuột phải. */
-    function setDragMode(mode) {
-        dragMode = mode;
-        if (!controls) return;
-        const move = mode === 'dichuyen';
-        controls.mouseButtons = {
-            LEFT: move ? null : THREE.MOUSE.ROTATE,
-            MIDDLE: THREE.MOUSE.DOLLY,
-            RIGHT: THREE.MOUSE.ROTATE,
-        };
-        controls.touches = {
-            ONE: move ? null : THREE.TOUCH.ROTATE,
-            TWO: THREE.TOUCH.DOLLY_ROTATE,
-        };
-    }
-
-    /** Khung hình hiện tại, ở dạng dán thẳng vào createSinger được. */
-    function getFraming() {
-        const w = el.clientWidth || 1, h = el.clientHeight || 1;
-        const off = camera.position.clone().sub(controls ? controls.target : lookAt);
-        const dist = off.length();
-        return {
-            distance: +dist.toFixed(3),
-            azimuth: +Math.atan2(off.x, off.z).toFixed(4),      // radian, 0 = nhìn từ trước
-            polar: +Math.acos(THREE.MathUtils.clamp(off.y / dist, -1, 1)).toFixed(4),
-            frameOffset: {
-                x: +(frameOffset.x / w).toFixed(4),             // tỉ lệ bề rộng khung
-                y: +(frameOffset.y / h).toFixed(4),
-            },
-        };
-    }
-
-    function applyFraming(fr) {
-        if (!fr) return;
-        const w = el.clientWidth || 1, h = el.clientHeight || 1;
-        if (fr.frameOffset) {
-            frameOffset.x = (fr.frameOffset.x ?? 0) * w;
-            frameOffset.y = (fr.frameOffset.y ?? 0) * h;
-            applyFrameOffset();
-        }
-        const dist = fr.distance ?? camera.position.distanceTo(lookAt);
-        const az = fr.azimuth ?? 0, po = fr.polar ?? Math.PI / 2;
-        const t = controls ? controls.target : lookAt;
-        camera.position.set(
-            t.x + dist * Math.sin(po) * Math.sin(az),
-            t.y + dist * Math.cos(po),
-            t.z + dist * Math.sin(po) * Math.cos(az));
-        camera.lookAt(t);
-        if (controls) controls.update();
-        userMoved = true;      // đã có khung hình chỉ định thì đừng tự canh lại
-    }
-
-    // Góc nhìn mặc định hơi chếch sang bên và hơi cao, theo đúng khung mà chủ
-    // dự án tự căn tay — nhìn thẳng trực diện trông phẳng và cứng hơn.
-    const DEF_AZIMUTH = options.azimuth ?? -0.079;   // radian
-    const DEF_POLAR = options.polar ?? 1.486;
-
-    function placeCamera(dist) {
-        const t = controls ? controls.target : lookAt;
-        camera.position.set(
-            t.x + dist * Math.sin(DEF_POLAR) * Math.sin(DEF_AZIMUTH),
-            t.y + dist * Math.cos(DEF_POLAR),
-            t.z + dist * Math.sin(DEF_POLAR) * Math.cos(DEF_AZIMUTH));
-        camera.lookAt(t);
-    }
 
     function fitCamera() {
         if (opts.distance !== null) { placeCamera(opts.distance); return; }
@@ -247,7 +129,7 @@ export async function createSinger(target, options = {}) {
         const forWidth = (shownWidth / 2) / Math.tan(hFov / 2);
         const d = Math.max(forHeight, forWidth) * opts.margin;
         if (controls) controls.target.copy(lookAt);
-        placeCamera(d);
+        frame_.place(d);
     }
 
     // --- âm thanh, chỉ dựng khi được yêu cầu ---
@@ -284,10 +166,10 @@ export async function createSinger(target, options = {}) {
         renderer.setSize(w, h, false);
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
-        applyFrameOffset();
+        frame_.apply();
         // Chỉ canh lại khung khi người dùng chưa đụng vào. Canh lại sau đó là
         // giật view về chỗ cũ ngay giữa lúc họ đang xoay.
-        if (!userMoved) {
+        if (!frame_.userMoved) {
             fitCamera();
             if (controls) controls.update();
         }
@@ -295,7 +177,7 @@ export async function createSinger(target, options = {}) {
     const ro = new ResizeObserver(resize);
     ro.observe(el);
     resize();
-    if (options.framing) applyFraming(options.framing);
+    if (options.framing) frame_.setFraming(options.framing);
 
     const fmt = v => (v >= 0 ? ' ' : '') + v.toFixed(2);
 
@@ -311,12 +193,12 @@ export async function createSinger(target, options = {}) {
     function updateHud() {
         if (!hud) return;
         const v = view();
-        const sp = screenPos();
+        const sp = frame_.screenPos();
         hud.textContent =
             `nhân vật trên khung   ${sp.x.toFixed(0)}% ngang   ${sp.y.toFixed(0)}% dọc\n`
             + `tâm nhìn   x ${fmt(v.target.x)}  y ${fmt(v.target.y)}  z ${fmt(v.target.z)}\n`
             + `máy quay   x ${fmt(v.camera.x)}  y ${fmt(v.camera.y)}  z ${fmt(v.camera.z)}\n`
-            + `khoảng cách ${v.distance.toFixed(2)} m   ·   ${dragMode === 'dichuyen' ? 'kéo = dời' : 'kéo = xoay'}`;
+            + `khoảng cách ${v.distance.toFixed(2)} m   ·   ${frame_.dragMode === 'dichuyen' ? 'kéo = dời' : 'kéo = xoay'}`;
     }
 
     function frame() {
@@ -353,23 +235,20 @@ export async function createSinger(target, options = {}) {
         pauseAudio() { if (audioEl) audioEl.pause(); playing = false; },
         /** Đưa góc nhìn về khung mặc định. */
         resetView() {
-            userMoved = false;
-            frameOffset.x = 0; frameOffset.y = 0;
-            applyFrameOffset();
-            if (controls) controls.target.copy(lookAt);
+            frame_.reset();
             fitCamera();
             if (controls) controls.update();
         },
         /** 'xoay' hoặc 'dichuyen' — quyết định kéo chuột trái làm gì. */
-        setDragMode,
-        get dragMode() { return dragMode; },
+        setDragMode: m => frame_.setDragMode(m),
+        get dragMode() { return frame_.dragMode; },
         /** Toạ độ hiện tại: tâm nhìn, vị trí máy quay, khoảng cách. */
         getView: view,
         /** Khung hình hiện tại, dán thẳng vào createSinger({ framing: ... }) được. */
-        getFraming,
-        setFraming: applyFraming,
+        getFraming: () => frame_.getFraming(),
+        setFraming: fr => frame_.setFraming(fr),
         /** Vị trí nhân vật trên khung, phần trăm. */
-        getScreenPos: screenPos,
+        getScreenPos: () => frame_.screenPos(),
         /** Bật tắt ô hiển thị toạ độ trong khung. */
         showCoords(on) {
             if (on && !hud) {
