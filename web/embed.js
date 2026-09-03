@@ -254,6 +254,8 @@ export async function createSinger(target, options = {}) {
             return { bpm: b.bpm, confidence: b.confidence, beatPhase: b.beatPhase,
                      timeScale: character.current ? character.current.timeScale : 1 };
         },
+        /** Dán lời bài hát (lời trần, không cần mốc thời gian). */
+        setLyrics: text => character.setLyrics(text),
         set beatSync(on) { character.beatSync = !!on; },
         get beatSync() { return character.beatSync; },
         states: character.manifest.states,

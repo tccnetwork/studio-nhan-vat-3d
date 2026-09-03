@@ -875,6 +875,23 @@ function setupUIEventListeners() {
         }, 400);
     }
 
+    const lyricsBox = document.getElementById('lyrics-box');
+    const lyricsNote = document.getElementById('lyrics-note');
+    if (lyricsBox) {
+        let timer = null;
+        lyricsBox.addEventListener('input', () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                if (!character) return;
+                const r = character.setLyrics(lyricsBox.value);
+                lyricsNote.textContent = r
+                    ? `${r.lines} câu · ${r.syllables} âm tiết — khẩu hình lấy nguyên âm từ lời,`
+                      + ' thời điểm lấy từ tiếng hát.'
+                    : 'Chưa có lời — khẩu hình đoán nguyên âm từ formant.';
+            }, 400);
+        });
+    }
+
     const btnAudio = document.getElementById('btn-toggle-audio');
     btnAudio.addEventListener('click', () => {
         setupAudioContext();

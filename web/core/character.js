@@ -7,6 +7,7 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { HairPhysics } from './hair.js';
 import { classifyVowel, createLoudnessGate } from './lipsync.js';
 import { BeatTracker, matchTimeScale } from './beat.js';
+import { LyricsDriver } from './lyrics.js';
 
 const STATE_FADE = 0.25;
 const VISEME_ATTACK = 14.0;   // tốc độ mở khẩu hình
@@ -38,6 +39,7 @@ export class Character {
         this.beat = new BeatTracker();
         this.beatSync = true;        // cho điệu nhảy chạy theo nhịp bài hát
         this._syncedFor = null;
+        this.lyrics = null;          // LyricsDriver khi người dùng dán lời vào
 
         for (const clip of this.clips) this.actions[clip.name] = this.mixer.clipAction(clip);
         this._prepare();
@@ -72,13 +74,15 @@ export class Character {
 
         for (const mesh of this.morphMeshes) {
             const dict = mesh.morphTargetDictionary || {};
+            // So khớp CHÍNH XÁC tên morph, không dùng chuỗi con: "Fcl_MTH_Angry"
+            // cũng chứa "MTH_A", và trước đây nó chỉ thua vì tình cờ đứng trước
+            // Fcl_MTH_A trong danh sách. Đổi thứ tự một cái là miệng chữ A biến
+            // thành miệng giận dữ.
+            const WANT = { Fcl_MTH_A: 'A', Fcl_MTH_I: 'I', Fcl_MTH_U: 'U',
+                           Fcl_MTH_E: 'E', Fcl_MTH_O: 'O' };
             for (const key in dict) {
-                const i = dict[key];
-                if (key.includes('MTH_A')) this.morphIndices.A = i;
-                else if (key.includes('MTH_I')) this.morphIndices.I = i;
-                else if (key.includes('MTH_U') && !key.includes('MTH_Up')) this.morphIndices.U = i;
-                else if (key.includes('MTH_E')) this.morphIndices.E = i;
-                else if (key.includes('MTH_O')) this.morphIndices.O = i;
+                const slot = WANT[key.split('.').pop()];
+                if (slot) this.morphIndices[slot] = dict[key];
             }
         }
         // Không dựng lò xo tóc ở đây: lúc này model chưa vào cảnh và chưa được
@@ -103,6 +107,16 @@ export class Character {
         this.current = next;
         this.currentName = clipName;
         return true;
+    }
+
+    /** Dán lời bài hát (không cần mốc thời gian) để lấy nguyên âm theo chữ.
+     *  Truyền chuỗi rỗng hoặc null để quay lại đoán nguyên âm từ formant. */
+    setLyrics(text) {
+        const t = String(text || '').trim();
+        this.lyrics = t ? new LyricsDriver(t) : null;
+        return this.lyrics
+            ? { lines: this.lyrics.lines.length, syllables: this.lyrics.totalSyllables }
+            : null;
     }
 
     setHairstyle(key) {
@@ -168,10 +182,17 @@ export class Character {
         // báo chứ không đoán từ tín hiệu; xem chú thích trong scripts/catalog.py.
         if (audio && audio.vocals && audio.spectrumDb) {
             const loud = this.gate.level(audio.spectrumDb, audio.sampleRate, delta);
-            if (loud > VOICE_ONSET) {
+            if (this.lyrics) {
+                // Có lời: thời điểm lấy từ âm thanh, nguyên âm lấy từ chữ.
+                // Chính xác hơn hẳn đoán formant trên bản phối đã trộn nhạc cụ.
+                const key = this.lyrics.push(loud, delta);
+                if (key) guess = { key, openness: Math.min(1, Math.max(0.25, loud)) };
+            } else if (loud > VOICE_ONSET) {
                 guess = classifyVowel(audio.spectrumDb, audio.sampleRate);
                 if (guess) guess.openness = Math.min(1, (loud - VOICE_ONSET) / 0.55);
             }
+        } else if (this.lyrics) {
+            this.lyrics.push(0, delta);
         }
         for (const key in this.visemes) {
             const target = guess && guess.key === key ? guess.openness : 0;

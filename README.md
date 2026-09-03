@@ -241,6 +241,27 @@ duyệt: nhạc 128 phách cho tốc độ ×0,979 tức vòng nhảy đúng 4,0
 cho 3,00 phách; 150 phách cho 5,00 phách. Trạng thái không đánh dấu `beat_sync`
 trong `scripts/catalog.py` thì không bị tua.
 
+### Lời bài hát không có mốc thời gian
+
+Có lời kèm mốc thời gian (`.lrc`) thì dễ: tới giây nào hát chữ nào. Chỉ có
+**lời trần** thì `web/core/lyrics.js` chia việc:
+
+```
+thời điểm  <-  lấy từ âm thanh (mỗi âm tiết bật lên là một mốc)
+nguyên âm  <-  lấy từ lời (chữ thứ n trong câu)
+```
+
+Chính xác hơn hẳn dò formant trên bản phối, vì tiếng Việt một âm tiết một
+nguyên âm chính. `syllableVowels` bỏ dấu rồi lấy tối đa hai nguyên âm, nên
+"Tiếng" ra I rồi E — miệng chuyển qua cả nguyên âm đôi.
+
+Nhược điểm là **trôi**: bỏ sót hay đếm thừa một âm tiết là lệch cả câu. Mỗi
+khoảng lặng dài hơn 0,9 giây được coi là hết câu và con trỏ nhảy về đầu câu kế
+— chỗ lấy hơi trở thành mốc chỉnh lại.
+
+Kiểm thử chạy thẳng trong node: **12/12 âm tiết đúng** ở cả năm kịch bản — hát
+đều, hát nhanh, có nhiễu 30%, nghỉ ngắn 0,5 giây, nghỉ dài 2 giây.
+
 Bài tự tải lên mặc định coi là **có lời** — người tải biết rõ hơn mọi phép đoán
 từ tín hiệu.
 
