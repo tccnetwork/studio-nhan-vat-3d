@@ -246,6 +246,13 @@ dữ liệu hoạt ảnh chỉ để lưu xương tóc, và mỗi module trạng
 cùng một đoạn rủ tóc. Nay tóc phản ứng với chuyển động thật nên nó cũng đúng cả
 trong lúc chuyển tiếp giữa hai trạng thái — điều bản bake cứng không làm được.
 
+Quán tính của mỗi đốt tóc phải đo **trong hệ quy chiếu của xương cha**, không
+phải hệ thế giới. Khi cha xoay, chóp tóc con bị cuốn đi theo; nếu vẫn so với vị
+trí cũ trong hệ thế giới thì đốt con nhận một vận tốc ma, và mỗi đốt trong chuỗi
+nhận một vận tốc ma khác nhau — các khớp cong ngược chiều nhau và tóc gấp khúc
+như lò xo. Đo được: sửa xong độ cong trung bình từ 17,9° xuống 12,2°, số cặp nếp
+gấp lớn hơn 6° từ 12 xuống 8 mỗi khung.
+
 Quaternion của mỗi đốt tóc **phải được chuẩn hoá lại sau mỗi bước**. Mỗi bước
 nhân chồng ba quaternion, sai số dấu phẩy động dồn lại làm `|q|` lệch khỏi 1 —
 mà ma trận xoay sinh từ quaternion nhân tỉ lệ theo `|q|²`. Đo được: không chuẩn

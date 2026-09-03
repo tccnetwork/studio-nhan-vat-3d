@@ -12,6 +12,8 @@ const _v3 = new THREE.Vector3();
 const _q1 = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _qi = new THREE.Quaternion();
+const _m1 = new THREE.Matrix4();
+const _m2 = new THREE.Matrix4();
 
 // Bảng quả cầu va chạm đến từ manifest (scripts/catalog.py), không viết cứng
 // ở đây: tools/make_vrm.py cũng đọc đúng bảng đó khi ghi phần VRMC_springBone.
@@ -66,6 +68,9 @@ export class HairPhysics {
                 childLocalPos: child.position.clone().normalize(),
                 prevTip: child.getWorldPosition(new THREE.Vector3()),
                 curTip: child.getWorldPosition(new THREE.Vector3()),
+                // Ma trận của xương cha ở bước trước, để quy vận tốc về hệ quy
+                // chiếu đang chuyển động của cha — xem chú thích trong _step.
+                parentLast: bone.parent.matrixWorld.clone(),
             });
         }
         // Cha trước con: đốt gốc phải chốt xong thì đốt sau mới tính đúng vị trí.
@@ -93,6 +98,20 @@ export class HairPhysics {
 
         for (const sp of this.springs) {
             const bone = sp.bone;
+
+            // Quán tính phải đo trong hệ quy chiếu của xương cha, không phải hệ
+            // thế giới. Khi cha xoay, chóp tóc con bị cuốn đi theo — nếu vẫn so
+            // với vị trí cũ trong hệ thế giới thì đốt con nhận một vận tốc ma,
+            // và mỗi đốt trong chuỗi nhận một vận tốc ma khác nhau. Kết quả là
+            // các khớp cong ngược chiều nhau: tóc gấp khúc như lò xo thay vì rủ.
+            //
+            // Cách chữa: dời prevTip và curTip theo đúng chuyển động của cha kể
+            // từ bước trước, rồi mới tính quán tính.
+            _m1.copy(bone.parent.matrixWorld).multiply(_m2.copy(sp.parentLast).invert());
+            sp.prevTip.applyMatrix4(_m1);
+            sp.curTip.applyMatrix4(_m1);
+            sp.parentLast.copy(bone.parent.matrixWorld);
+
             const head = bone.getWorldPosition(_v1).clone();
             bone.parent.getWorldQuaternion(_q1);
 
