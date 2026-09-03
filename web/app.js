@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { HairPhysics } from './core/hair.js';
+import { classifyVowel, createLoudnessGate, selfTest as vowelSelfTest } from './core/lipsync.js';
 
 // Bộ giải nén Draco để ngay trong dự án thay vì lấy từ CDN: trang tải được
 // khi không có mạng, và thời gian tải không còn phụ thuộc độ trễ của CDN.
@@ -459,11 +461,11 @@ function loadModel(path) {
         scene.add(characterModel);
         cacheMorphIndices(characterModel);
         try {
-            initHairPhysicsColliders(characterModel);
-            buildHairSprings();
+            const n = hairPhysics.build(characterModel);
+            console.log(`Vật lý tóc: ${n} đốt`);
         } catch (err) {
             console.error('Vật lý tóc không khởi tạo được:', err);
-            hairSprings = [];
+            hairPhysics.springs = [];
         }
     }, undefined, (err) => {
         console.error("Error loading anime idol model:", err);
@@ -778,293 +780,33 @@ function resetCharacterColors() {
 // ==========================================
 // REAL-TIME HAIR COLLISION & SPRING PHYSICS
 // ==========================================
-let hairBonesList = [];
-let bodyColliders = [];
-
-function initHairPhysicsColliders(model) {
-    hairBonesList = [];
-    bodyColliders = [];
-
-    let upperChestBone = null;
-    let spineBone = null;
-    let shoulderLBone = null;
-    let shoulderRBone = null;
-    let upperArmLBone = null;
-    let upperArmRBone = null;
-
-    model.traverse((node) => {
-        if (node.isBone) {
-            const name = node.name;
-            if (name.includes('UpperChest')) upperChestBone = node;
-            else if (name.includes('Spine')) spineBone = node;
-            else if (name.includes('Shoulder_L')) shoulderLBone = node;
-            else if (name.includes('Shoulder_R')) shoulderRBone = node;
-            else if (name.includes('UpperArm_L') || name.includes('L_UpperArm')) upperArmLBone = node;
-            else if (name.includes('UpperArm_R') || name.includes('R_UpperArm')) upperArmRBone = node;
-            else if (name.toLowerCase().includes('hair') && name.includes('_Sec_')) {
-                hairBonesList.push(node);
-            }
-        }
-    });
-
-    if (upperChestBone) {
-        // Back of jacket collision sphere (covers shoulder blades & back contour)
-        bodyColliders.push({ bone: upperChestBone, offset: new THREE.Vector3(0, -0.010, 0.045), radius: 0.138 });
-        // Front chest collision sphere
-        bodyColliders.push({ bone: upperChestBone, offset: new THREE.Vector3(0, -0.010, -0.040), radius: 0.135 });
-    }
-    if (spineBone) {
-        bodyColliders.push({ bone: spineBone, offset: new THREE.Vector3(0, 0.010, 0.035), radius: 0.125 });
-    }
-    if (shoulderLBone) {
-        bodyColliders.push({ bone: shoulderLBone, offset: new THREE.Vector3(0.040, 0, 0.015), radius: 0.098 });
-    }
-    if (shoulderRBone) {
-        bodyColliders.push({ bone: shoulderRBone, offset: new THREE.Vector3(-0.040, 0, 0.015), radius: 0.098 });
-    }
-    if (upperArmRBone) {
-        // Raised right arm deltoid collider for pointing gesture
-        bodyColliders.push({ bone: upperArmRBone, offset: new THREE.Vector3(0, 0, 0), radius: 0.105 });
-    }
-    if (upperArmLBone) {
-        bodyColliders.push({ bone: upperArmLBone, offset: new THREE.Vector3(0, 0, 0), radius: 0.095 });
-    }
-}
-
-// ==========================================
-// VẬT LÝ TÓC — mô phỏng lúc chạy
-//
-// Trước đây chuyển động tóc được bake cứng vào từng clip: 0,864 MB trong 1,33 MB
-// dữ liệu hoạt ảnh chỉ để lưu xương tóc, và mỗi module trạng thái phải lặp lại
-// cùng một đoạn rủ tóc. Nay tóc phản ứng với chuyển động thật của nhân vật, nên
-// nó cũng đúng cả trong lúc chuyển tiếp giữa hai trạng thái — điều mà bản bake
-// cứng không làm được.
-//
-// Thuật toán là spring bone theo quy ước VRM, hợp với model VRoid này: mỗi đốt
-// tóc giữ vị trí chóp ở frame trước, mỗi bước lấy quán tính cộng lực kéo về tư
-// thế nghỉ cộng trọng lực, rồi ép chóp về đúng bán kính của đốt.
-// ==========================================
+// Vật lý tóc nằm ở core/hair.js, bộ phân loại nguyên âm ở core/lipsync.js —
+// bản nhúng embed.js dùng chung đúng hai cài đặt đó.
+const hairPhysics = new HairPhysics();
 const STATE_FADE = 0.25;           // giây hoà giữa hai trạng thái
-const HAIR_STEP = 1 / 60;          // bước cố định, cho kết quả không đổi theo fps
-const HAIR_DRAG = 0.38;            // hãm quán tính
-const HAIR_STIFFNESS = 0.055;      // lực kéo về tư thế nghỉ
-const HAIR_GRAVITY = 0.020;        // độ trĩu xuống
-const HAIR_RADIUS = 0.018;         // bán kính lọn tóc khi va chạm
-
-let hairSprings = [];
-let hairAccumulator = 0;
-
-function buildHairSprings() {
-    hairSprings = [];
-    for (const bone of hairBonesList) {
-        const child = bone.children.find(c => c.isBone);
-        if (!bone.parent || !child) continue;
-        const len = child.position.length();
-        if (len < 1e-5) continue;
-        let depth = 0;
-        for (let p = bone.parent; p && p.isBone; p = p.parent) depth++;
-        hairSprings.push({
-            bone,
-            child,
-            depth,
-            len,
-            restLocalQuat: bone.quaternion.clone(),
-            childLocalPos: child.position.clone().normalize(),
-            prevTip: child.getWorldPosition(new THREE.Vector3()),
-            curTip: child.getWorldPosition(new THREE.Vector3()),
-        });
-    }
-    // Cha trước con: đốt gốc phải chốt xong thì đốt sau mới tính đúng vị trí.
-    hairSprings.sort((a, b) => a.depth - b.depth);
-    console.log(`Vật lý tóc: ${hairSprings.length} đốt trên ${hairBonesList.length} xương tóc`);
-}
-
-const _v1 = new THREE.Vector3();
-const _v2 = new THREE.Vector3();
-const _v3 = new THREE.Vector3();
-const _q1 = new THREE.Quaternion();
-const _q2 = new THREE.Quaternion();
-
-function stepHairPhysics() {
-    const colliders = bodyColliders.map(c => ({
-        center: c.offset.clone().applyMatrix4(c.bone.matrixWorld),
-        radius: c.radius,
-    }));
-
-    for (const sp of hairSprings) {
-        const bone = sp.bone;
-        const head = bone.getWorldPosition(_v1).clone();
-        bone.parent.getWorldQuaternion(_q1);
-
-        // Hướng mà đốt tóc sẽ chỉ nếu không có lực nào tác động
-        const restDir = sp.childLocalPos.clone()
-            .applyQuaternion(sp.restLocalQuat)
-            .applyQuaternion(_q1)
-            .normalize();
-
-        const next = sp.curTip.clone()
-            .add(_v2.subVectors(sp.curTip, sp.prevTip).multiplyScalar(1 - HAIR_DRAG))
-            .addScaledVector(restDir, HAIR_STIFFNESS * sp.len)
-            .add(_v3.set(0, -HAIR_GRAVITY * sp.len, 0));
-
-        // Đốt tóc không co giãn: chóp luôn nằm trên mặt cầu bán kính len
-        next.sub(head).setLength(sp.len).add(head);
-
-        for (const col of colliders) {
-            const d = next.distanceTo(col.center);
-            const r = col.radius + HAIR_RADIUS;
-            if (d < r && d > 1e-5) {
-                next.sub(col.center).setLength(r).add(col.center);
-                next.sub(head).setLength(sp.len).add(head);
-            }
-        }
-
-        // Xoay đốt tóc để nó chỉ về chóp mới, tính trong không gian thế giới
-        const curDir = sp.child.getWorldPosition(_v2).sub(head);
-        if (curDir.lengthSq() > 1e-10) {
-            _q2.setFromUnitVectors(curDir.normalize(),
-                                   _v3.subVectors(next, head).normalize());
-            bone.parent.getWorldQuaternion(_q1);
-            bone.quaternion
-                .premultiply(_q1)
-                .premultiply(_q2)
-                .premultiply(_q1.clone().invert());
-            bone.updateMatrixWorld(true);
-        }
-
-        sp.prevTip.copy(sp.curTip);
-        sp.curTip.copy(next);
-    }
-}
-
-function updateHairPhysics(delta) {
-    if (hairSprings.length === 0) return;
-    hairAccumulator += Math.min(delta, 0.1);
-    let steps = 0;
-    while (hairAccumulator >= HAIR_STEP && steps < 3) {
-        stepHairPhysics();
-        hairAccumulator -= HAIR_STEP;
-        steps++;
-    }
-    if (steps === 3) hairAccumulator = 0;   // tụt fps thì bỏ bớt chứ không dồn nợ
-}
-
-// ==========================================
-// KHẨU HÌNH THEO ÂM VỊ
-//
-// Bản trước xoay vòng nguyên âm theo đồng hồ: Math.floor(time * 3.5) % 4.
-// Nhìn thoáng thì khớp nhạc vì biên độ lấy từ âm lượng, nhưng miệng mở hình gì
-// thì hoàn toàn không liên quan tới tiếng hát.
-//
-// Ở đây nguyên âm được đoán từ hai formant — hai đỉnh cộng hưởng của khoang
-// miệng. F1 phản ánh độ mở hàm, F2 phản ánh vị trí lưỡi trước sau; cặp (F1, F2)
-// gần như xác định duy nhất một nguyên âm. Bảng dưới lấy theo giọng nữ, hợp với
-// nhân vật này.
-// ==========================================
-const VOWELS = [
-    { key: 'A', f1: 850, f2: 1220 },
-    { key: 'I', f1: 350, f2: 2750 },
-    { key: 'U', f1: 370, f2: 950 },
-    { key: 'E', f1: 560, f2: 2350 },
-    { key: 'O', f1: 450, f2: 800 },
-];
-// F2 của các nguyên âm sau nằm rất thấp — O ở khoảng 800 Hz, U ở 950 — nên dải
-// dò F2 phải chạm xuống dưới 1000, nếu không cả hai đều bị dò trượt và lẫn vào
-// nhau. Đổi lại phải ràng buộc F2 luôn cao hơn F1 để hai phép dò không cùng bắt
-// vào một đỉnh.
-const F1_BAND = [250, 1000];
-const F2_BAND = [700, 3200];
-const F2_ABOVE_F1 = 1.25;
-const VOICE_BAND = [90, 4000];
-// Không đặt ngưỡng dB tuyệt đối: giá trị getFloatFrequencyData phụ thuộc mức
-// thu và cách phối của từng bản, nên một con số cứng chỉ đúng với đúng một
-// file. Thay vào đó theo dõi mức im lặng và mức to nhất gần đây rồi chuẩn hoá
-// theo khoảng đó.
-const LEVEL_ADAPT = 0.4;           // tốc độ bám của mức nền, mỗi giây
-const LEVEL_MIN_RANGE = 8;         // dB, khoảng động tối thiểu để coi là có tiếng
-let levelFloor = null;
-let levelCeil = null;
 const VISEME_ATTACK = 14.0;        // tốc độ mở khẩu hình
 const VISEME_RELEASE = 7.0;        // tốc độ đóng lại, chậm hơn cho đỡ giật
-
+const VOICE_ONSET = 0.25;          // dưới mức này coi như đang giữa hai câu hát
 const visemeWeights = { A: 0, I: 0, U: 0, E: 0, O: 0 };
-let visemeJaw = 0;
+const loudnessGate = createLoudnessGate();
 
-function peakInBand(db, sampleRate, lo, hi) {
-    const binHz = sampleRate / (db.length * 2);
-    const from = Math.max(1, Math.floor(lo / binHz));
-    const to = Math.min(db.length - 1, Math.ceil(hi / binHz));
-    let best = from, bestDb = -Infinity;
-    for (let i = from; i <= to; i++) {
-        if (db[i] > bestDb) { bestDb = db[i]; best = i; }
-    }
-    // Nội suy parabol quanh đỉnh: không có bước này thì tần số bị lượng tử
-    // theo bin và nguyên âm nhảy qua nhảy lại giữa hai ô cạnh nhau.
-    const y0 = db[best - 1], y1 = db[best], y2 = db[best + 1];
-    let shift = 0;
-    if (isFinite(y0) && isFinite(y2)) {
-        const denom = y0 - 2 * y1 + y2;
-        if (Math.abs(denom) > 1e-6) shift = 0.5 * (y0 - y2) / denom;
-    }
-    return { hz: (best + shift) * binHz, db: bestDb };
-}
-
-function bandEnergyDb(db, sampleRate, lo, hi) {
-    const binHz = sampleRate / (db.length * 2);
-    const from = Math.max(1, Math.floor(lo / binHz));
-    const to = Math.min(db.length - 1, Math.ceil(hi / binHz));
-    let sum = 0;
-    for (let i = from; i <= to; i++) sum += db[i];
-    return sum / (to - from + 1);
-}
-
-/** Đoán nguyên âm từ một phổ. Hàm thuần: cùng đầu vào luôn cho cùng kết quả,
- *  không giữ trạng thái, nên kiểm thử được bằng phổ tổng hợp có formant biết trước.
- *  Việc quyết định "lúc này có đang phát ra tiếng không" thuộc về updateLipSync. */
-function classifyVowel(db, sampleRate) {
-    const p1 = peakInBand(db, sampleRate, F1_BAND[0], F1_BAND[1]);
-    const lo2 = Math.max(F2_BAND[0], p1.hz * F2_ABOVE_F1);
-    if (lo2 >= F2_BAND[1]) return null;
-    const p2 = peakInBand(db, sampleRate, lo2, F2_BAND[1]);
-    if (!isFinite(p1.db) || !isFinite(p2.db)) return null;
-
-    // So sánh theo thang log: tai người nghe tần số theo tỉ lệ chứ không theo hiệu.
-    let best = null, bestDist = Infinity;
-    for (const v of VOWELS) {
-        const d1 = Math.log(p1.hz / v.f1);
-        const d2 = Math.log(p2.hz / v.f2);
-        const dist = d1 * d1 + d2 * d2 * 0.7;   // F1 quan trọng hơn cho độ mở miệng
-        if (dist < bestDist) { bestDist = dist; best = v.key; }
-    }
-    return { key: best, f1: p1.hz, f2: p2.hz };
-}
-
-/** Mức to hiện tại, chuẩn hoá 0..1 theo nền và trần bám chậm.
- *  Không dùng ngưỡng dB tuyệt đối vì giá trị getFloatFrequencyData phụ thuộc
- *  mức thu và cách phối của từng bản nhạc. */
-function voiceLoudness(db, sampleRate, delta) {
-    const level = bandEnergyDb(db, sampleRate, VOICE_BAND[0], VOICE_BAND[1]);
-    if (!isFinite(level)) return 0;
-    if (levelFloor === null) { levelFloor = level; levelCeil = level + LEVEL_MIN_RANGE; }
-    const k = Math.min(1, LEVEL_ADAPT * delta);
-    levelFloor += (level < levelFloor ? 0.5 : k * 0.02) * (level - levelFloor);
-    levelCeil += (level > levelCeil ? 0.5 : k * 0.05) * (level - levelCeil);
-    const range = Math.max(LEVEL_MIN_RANGE, levelCeil - levelFloor);
-    return Math.min(1, Math.max(0, (level - levelFloor) / range));
-}
+// Tự kiểm tra bộ phân loại: mở Console rồi gõ __vowelProbe().
+// Phải ra "A->A I->I U->U E->E O->O", không có chữ SAI nào.
+window.__vowelProbe = vowelSelfTest;
 
 function updateLipSync(delta) {
     if (!analyser || !audioSpectrumDb) return;
     analyser.getFloatFrequencyData(audioSpectrumDb);
+
     // Chỉ nhép khi bản đang phát thực sự có giọng hát. Đây là điều khai báo
     // trong scripts/catalog.py chứ không phải đoán từ tín hiệu — xem chú thích
     // ở đó để biết vì sao không đoán được.
     let guess = null;
     if (isAudioPlaying && currentTrack.vocals) {
-        const loud = voiceLoudness(audioSpectrumDb, audioContext.sampleRate, delta);
-        if (loud > 0.25) {                     // trên nền, tức đang có câu hát
+        const loud = loudnessGate.level(audioSpectrumDb, audioContext.sampleRate, delta);
+        if (loud > VOICE_ONSET) {
             guess = classifyVowel(audioSpectrumDb, audioContext.sampleRate);
-            if (guess) guess.openness = Math.min(1, (loud - 0.25) / 0.55);
+            if (guess) guess.openness = Math.min(1, (loud - VOICE_ONSET) / 0.55);
         }
     }
 
@@ -1073,8 +815,6 @@ function updateLipSync(delta) {
         const rate = target > visemeWeights[key] ? VISEME_ATTACK : VISEME_RELEASE;
         visemeWeights[key] += (target - visemeWeights[key]) * Math.min(1, rate * delta);
     }
-    const jawTarget = guess ? guess.openness * 0.55 : 0;
-    visemeJaw += (jawTarget - visemeJaw) * Math.min(1, VISEME_RELEASE * delta);
 
     const slot = {
         A: morphIndices.mouthA, I: morphIndices.mouthI, U: morphIndices.mouthU,
@@ -1085,34 +825,8 @@ function updateLipSync(delta) {
         for (const key in slot) {
             if (slot[key] >= 0) mesh.morphTargetInfluences[slot[key]] = visemeWeights[key] * 0.92;
         }
-        if (morphIndices.jawOpen >= 0) mesh.morphTargetInfluences[morphIndices.jawOpen] = visemeJaw;
     });
 }
-
-// Tự kiểm tra bộ phân loại nguyên âm. Mở Console của trình duyệt rồi gõ:
-//     __vowelProbe()
-// Nó dựng phổ tổng hợp có formant biết trước cho từng nguyên âm rồi đối chiếu
-// kết quả. Phải ra "A->A I->I U->U E->E O->O", không có chữ SAI nào.
-window.__vowelProbe = () => {
-    const SR = 48000, N = 1024;
-    const mk = (f1, f2) => {
-        const db = new Float32Array(N).fill(-95);
-        const binHz = SR / (N * 2);
-        for (let i = 1; i < N; i++) {
-            const hz = i * binHz;
-            db[i] = -80 + 46 * Math.exp(-Math.pow((hz - f1) / 90, 2))
-                        + 40 * Math.exp(-Math.pow((hz - f2) / 140, 2))
-                        + 30 * Math.exp(-Math.pow((hz - 220) / 60, 2));
-        }
-        return db;
-    };
-    levelFloor = null; levelCeil = null;
-    const cases = [['A',850,1220],['I',350,2750],['U',370,950],['E',560,2350],['O',450,800]];
-    return cases.map(([want,f1,f2]) => {
-        const g = classifyVowel(mk(f1,f2), SR);
-        return `${want}->${g ? g.key : 'null'}${g && g.key===want ? '' : ' SAI'}`;
-    }).join(' ');
-};
 
 function updateAnimationHUD(clipName) {
     let hud = document.getElementById('anim-hud');
@@ -1268,7 +982,7 @@ function animate() {
 
     if (mixer) {
         mixer.update(delta);
-        updateHairPhysics(delta);
+        hairPhysics.update(delta);
     }
 
     if (skeletonHelper && skeletonHelper.visible) {

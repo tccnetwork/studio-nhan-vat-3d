@@ -7,9 +7,10 @@ trình xem chạy thẳng trên trình duyệt.
 ```
 source/     Model nguồn — CHỈ ĐỌC. Không script nào được ghi vào đây.
 build/      Kết quả dựng (glb / fbx / blend / manifest.json). Dựng lại là có.
-web/        Trình xem 3D — three.js r180 dạng ES module, tự sinh giao diện từ
-            manifest, giải nén Draco (bộ giải nén để sẵn ở web/vendor/),
-            và mô phỏng vật lý tóc lúc chạy.
+web/        core/     lõi dùng chung: nạp model, vật lý tóc, khẩu hình
+            embed.js  bản nhúng vào trang khác — API công khai
+            app.js    trang studio, dùng cùng lõi đó
+            vendor/   bộ giải nén Draco để sẵn, không cần mạng
 scripts/    catalog.py là danh mục gốc; build_character.py điều phối;
             states/ mỗi trạng thái một file; rig.py và hairstyles.py dùng chung.
 tools/      Tiện ích thao tác GLB, không cần Blender.
@@ -109,6 +110,35 @@ Ba nút vặn ở cuối `scripts/hairstyles.py`: `hang` (xoè hay rơi thẳng)
 
 **Khẩu hình chưa bám lời hát.** Miệng xoay vòng nguyên âm theo đồng hồ chứ
 không theo âm vị, dù trình xem đã có phân tích FFT thật.
+
+## Nhúng nhân vật vào trang khác
+
+```html
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/" } }
+</script>
+<div id="slot" style="width:100%;height:520px"></div>
+<script type="module">
+  import { createSinger } from './web/embed.js';
+  const singer = await createSinger('#slot', { state: '15_BuocDi_Mocap' });
+  singer.setHairstyle('bob');
+  singer.setColor('hair', '#ffc0cb');
+  await singer.playAudio('vocal_song_pop.mp3');
+</script>
+```
+
+Xem `web/embed-demo.html` để có ví dụ chạy được. `createSinger` trả về
+`setState`, `setHairstyle`, `setColor`, `playAudio`, `pauseAudio`, `destroy`,
+cùng ba danh sách `states` / `hairstyles` / `audioTracks` đọc thẳng từ manifest
+— nên trang chủ nhà không phải viết cứng thứ gì.
+
+Đường dẫn tài nguyên suy ra từ vị trí của chính `embed.js`, đổi được bằng tuỳ
+chọn `base`. Không có tuỳ chọn nào bắt buộc.
+
+**Trang studio và bản nhúng dùng chung `web/core/`** — vật lý tóc, bộ phân loại
+nguyên âm và phần nạp model chỉ có một cài đặt duy nhất.
 
 ## Khẩu hình
 

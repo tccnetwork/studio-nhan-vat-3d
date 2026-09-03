@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nhúng nhân vật — ví dụ</title>
+<style>
+  body { margin:0; background:#0d1017; color:#dfe3ec;
+         font:15px/1.6 -apple-system,"Segoe UI",sans-serif; }
+  .page { max-width:900px; margin:0 auto; padding:36px 24px 64px; }
+  h1 { font-size:1.5rem; margin:0 0 6px; }
+  p  { color:#9aa3b4; margin:0 0 20px; max-width:62ch; }
+  #slot { width:100%; height:520px; border-radius:12px; overflow:hidden;
+          border:1px solid #262c3a; background:#160d24; }
+  .row { display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; }
+  button { background:#1a2030; color:#dfe3ec; border:1px solid #333c50;
+           border-radius:7px; padding:7px 11px; font-size:12.5px; cursor:pointer; }
+  button:hover { border-color:#5b6a86; }
+  button.on { background:#2a3550; }
+  pre { background:#141824; border:1px solid #262c3a; border-radius:8px;
+        padding:14px 16px; overflow-x:auto; font-size:12.5px; color:#a6b0c3; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div class="page">
+  <h1>Nhúng nhân vật vào một trang bất kỳ</h1>
+  <p>Trang này không dùng gì của studio ngoài <code>web/embed.js</code>. Toàn bộ
+     mã cần thiết nằm trong khối bên dưới.</p>
+  <div id="slot"></div>
+  <div class="row" id="states"></div>
+  <div class="row" id="hairs"></div>
+  <div class="row" id="audio"></div>
+  <pre id="code"></pre>
+</div>
+<script type="module">
+import { createSinger } from './embed.js';
+
+const singer = await createSinger('#slot', { autoRotate: false });
+window.singer = singer;
+
+const mk = (host, label, fn) => {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.onclick = () => { fn(); [...host.children].forEach(c => c.classList.remove('on')); b.classList.add('on'); };
+  host.appendChild(b);
+  return b;
+};
+singer.states.forEach(s => mk(document.getElementById('states'),
+  `${s.icon} ${s.label}`, () => singer.setState(s.clip)));
+singer.hairstyles.forEach(h => mk(document.getElementById('hairs'),
+  `${h.icon} ${h.label}`, () => singer.setHairstyle(h.key)));
+singer.audioTracks.forEach(t => mk(document.getElementById('audio'),
+  `${t.icon} ${t.label}${t.vocals ? '' : ' (không nhép miệng)'}`,
+  () => singer.playAudio(t.file)));
+mk(document.getElementById('audio'), '⏸ Dừng nhạc', () => singer.pauseAudio());
+
+document.getElementById('code').textContent =
+`import { createSinger } from './web/embed.js';
+
+const singer = await createSinger('#slot', { state: '15_BuocDi_Mocap' });
+singer.setHairstyle('bob');
+singer.setColor('hair', '#ffc0cb');
+await singer.playAudio('vocal_song_pop.mp3');
+
+// ${singer.states.length} trạng thái, ${singer.hairstyles.length} kiểu tóc, ${singer.audioTracks.length} bản nhạc`;
+</script>
+</body>
+</html>
