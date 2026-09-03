@@ -5,10 +5,8 @@
 // window ở cuối file, vì module có phạm vi riêng chứ không đổ ra toàn cục.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { HairPhysics } from './core/hair.js';
-import { classifyVowel, createLoudnessGate, selfTest as vowelSelfTest } from './core/lipsync.js';
+import { Character } from './core/character.js';
+import { selfTest as vowelSelfTest } from './core/lipsync.js';
 
 // Bộ giải nén Draco để ngay trong dự án thay vì lấy từ CDN: trang tải được
 // khi không có mạng, và thời gian tải không còn phụ thuộc độ trễ của CDN.
@@ -26,6 +24,7 @@ let manifest = null;
 let stateByClip = {};      // ten clip -> muc trong manifest
 
 let scene, camera, renderer, controls, clock;
+let character = null;
 let characterModel = null, morphMeshes = [], mixer = null;
 let skeletonHelper = null;
 let particlesSystem;
@@ -143,7 +142,7 @@ function init() {
         buildStateButtons();
         buildHairstyleButtons();
         buildAudioButtons();
-        loadModel(BUILD_DIR + manifest.model + '?v=' + Date.now());
+        loadModel();
     });
 }
 
@@ -385,91 +384,46 @@ function setupAudioContext() {
     }
 }
 
-function loadModel(path) {
-    if (characterModel) {
-        scene.remove(characterModel);
-        if (skeletonHelper) {
-            scene.remove(skeletonHelper);
-            skeletonHelper = null;
-        }
+async function loadModel() {
+    if (character) {
+        scene.remove(character.root);
+        if (skeletonHelper) { scene.remove(skeletonHelper); skeletonHelper = null; }
+    }
+    try {
+        character = await Character.load({
+            manifestUrl: MANIFEST_URL,
+            buildDir: BUILD_DIR,
+            dracoPath: DRACO_DECODER_PATH,
+        });
+    } catch (err) {
+        showFatal('Không tải được model', String(err && err.message || err));
+        throw err;
     }
 
-    const loader = new GLTFLoader();
-    // Lưới trong GLB được nén Draco lúc xuất; bộ giải nén nạp kèm three.js.
-    const draco = new DRACOLoader();
-    draco.setDecoderPath(DRACO_DECODER_PATH);
-    loader.setDRACOLoader(draco);
-    loader.load(path, (gltf) => {
-        characterModel = gltf.scene;
+    characterModel = character.root;
+    characterModel.position.set(0, 0.15, 0);   // mặt sàn sân khấu ở y = 0,15 m
+    morphMeshes = character.morphMeshes;
+    hairMeshes = character.hairMeshes;
+    mixer = character.mixer;
+    animationsMap = character.actions;
+    const dflt = character.manifest.hairstyles.find(h => h.default);
+    if (dflt) currentHairstyle = dflt.key;
 
-        // Top surface of the stage cylinder is at y = 0.15m
-        characterModel.position.set(0, 0.15, 0);
-        characterModel.rotation.y = 0;
+    scene.add(characterModel);
 
-        morphMeshes = [];
-        characterModel.traverse((child) => {
-            if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
-                if (child.material) child.material.side = THREE.DoubleSide;
-                if (child.morphTargetInfluences && child.morphTargetInfluences.length > 0) {
-                    morphMeshes.push(child);
-                }
+    skeletonHelper = new THREE.SkeletonHelper(characterModel);
+    skeletonHelper.material.linewidth = 2;
+    skeletonHelper.material.color.set(0x38bdf8);
+    const skelToggle = document.getElementById('toggle-skeleton');
+    skeletonHelper.visible = skelToggle ? skelToggle.checked : false;
+    scene.add(skeletonHelper);
 
-                // Lưới tóc: khớp thẳng theo tên trong manifest thay vì đoán
-                // qua chuỗi con — cách đoán cũ làm các bản trùng tên ghi đè
-                // lẫn nhau và chỉ giữ lại bản cuối.
-                const hairEntry = manifest.hairstyles.find(h => h.mesh === child.name);
-                if (hairEntry) {
-                    hairMeshes[hairEntry.key] = child;
-                    child.visible = !!hairEntry.default;
-                    if (hairEntry.default) currentHairstyle = hairEntry.key;
-                }
-            }
-        });
-
-        // CREATE 3D SKELETON HELPER TO VISUALIZE ALL 154 BONES & 30 FINGER BONES
-        skeletonHelper = new THREE.SkeletonHelper(characterModel);
-        skeletonHelper.material.linewidth = 2;
-        skeletonHelper.material.color.set(0x38bdf8);
-        skeletonHelper.visible = document.getElementById('toggle-skeleton').checked;
-        scene.add(skeletonHelper);
-
-        // SETUP ALL 4 ANIMATION CLIPS
-        animationsMap = {};
-        if (gltf.animations && gltf.animations.length > 0) {
-            mixer = new THREE.AnimationMixer(characterModel);
-            console.log("Found animation clips:", gltf.animations.map(a => a.name));
-            
-            gltf.animations.forEach((clip) => {
-                const action = mixer.clipAction(clip);
-                animationsMap[clip.name] = action;
-            });
-
-            // Start with State 1: 01_DungNghiem
-            const defaultClip = gltf.animations.find(c => c.name === '01_DungNghiem') || gltf.animations[0];
-            if (defaultClip && animationsMap[defaultClip.name]) {
-                currentAction = animationsMap[defaultClip.name];
-                currentAction.play();
-                currentActionName = defaultClip.name;
-                updateAnimationHUD(defaultClip.name);
-            }
-        }
-
-        // Đưa nhân vật vào cảnh TRƯỚC khi dựng vật lý tóc: nếu bước tóc ném lỗi
-        // thì cũng chỉ mất phần tóc động, chứ không mất luôn cả nhân vật.
-        scene.add(characterModel);
-        cacheMorphIndices(characterModel);
-        try {
-            const n = hairPhysics.build(characterModel);
-            console.log(`Vật lý tóc: ${n} đốt`);
-        } catch (err) {
-            console.error('Vật lý tóc không khởi tạo được:', err);
-            hairPhysics.springs = [];
-        }
-    }, undefined, (err) => {
-        console.error("Error loading anime idol model:", err);
-    });
+    cacheMorphIndices(characterModel);
+    character.setState(manifest.defaultState, 0);
+    currentAction = character.current;
+    currentActionName = character.currentName;
+    updateAnimationHUD(currentActionName);
+    console.log(`Đã nạp: ${Object.keys(animationsMap).length} clip`);
 }
 
 // ==========================================
@@ -491,9 +445,7 @@ window.switchHairstyle = function(styleName) {
         activeBtn.style.background = hexToRgba(entry.accent, 0.2);
     }
 
-    for (const key in hairMeshes) {
-        if (hairMeshes[key]) hairMeshes[key].visible = (key === styleName);
-    }
+    character.setHairstyle(styleName);
 
     const picker = document.getElementById('picker-hair');
     changeCharacterColor('hair', picker ? picker.value : '#ffffff');
@@ -710,41 +662,7 @@ function updateFacialAnimation(delta) {
 // REAL-TIME CHARACTER COLOR CUSTOMIZER
 // ==========================================
 function changeCharacterColor(part, hexColor) {
-    if (!characterModel) return;
-    const targetMatNames = manifest && manifest.materialGroups[part];
-    if (!targetMatNames) return;
-
-    characterModel.traverse((child) => {
-        if (child.isMesh && child.material) {
-            const materials = Array.isArray(child.material) ? child.material : [child.material];
-            materials.forEach((mat) => {
-                if (targetMatNames.some(name => mat.name.includes(name))) {
-                    mat.color.set(hexColor);
-
-                    // Enhanced lighting boost for dark textures (Eyes, Bottoms/Skirt, Tops, Shoes)
-                    if (mat.emissive) {
-                        if (part === 'eyes') {
-                            mat.emissive.set(hexColor);
-                            mat.emissiveIntensity = (hexColor.toLowerCase() === '#ffffff') ? 0.0 : 0.75;
-                        } else if (part === 'bottoms') {
-                            mat.emissive.set(hexColor);
-                            mat.emissiveIntensity = (hexColor.toLowerCase() === '#ffffff' || hexColor.toLowerCase() === '#18181b') ? 0.0 : 0.55;
-                        } else if (part === 'tops' || part === 'shoes' || part === 'hair') {
-                            mat.emissive.set(hexColor);
-                            mat.emissiveIntensity = (hexColor.toLowerCase() === '#ffffff') ? 0.0 : 0.25;
-                        } else {
-                            mat.emissive.set(0x000000);
-                            mat.emissiveIntensity = 0.0;
-                        }
-                    }
-                    mat.needsUpdate = true;
-                }
-            });
-        }
-    });
-
-    const picker = document.getElementById(`picker-${part}`);
-    if (picker) picker.value = hexColor;
+    if (character) character.setColor(part, hexColor);
 }
 
 function applyColorPreset(part, hexColor) {
@@ -780,53 +698,12 @@ function resetCharacterColors() {
 // ==========================================
 // REAL-TIME HAIR COLLISION & SPRING PHYSICS
 // ==========================================
-// Vật lý tóc nằm ở core/hair.js, bộ phân loại nguyên âm ở core/lipsync.js —
-// bản nhúng embed.js dùng chung đúng hai cài đặt đó.
-const hairPhysics = new HairPhysics();
-const STATE_FADE = 0.25;           // giây hoà giữa hai trạng thái
-const VISEME_ATTACK = 14.0;        // tốc độ mở khẩu hình
-const VISEME_RELEASE = 7.0;        // tốc độ đóng lại, chậm hơn cho đỡ giật
-const VOICE_ONSET = 0.25;          // dưới mức này coi như đang giữa hai câu hát
-const visemeWeights = { A: 0, I: 0, U: 0, E: 0, O: 0 };
-const loudnessGate = createLoudnessGate();
-
-// Tự kiểm tra bộ phân loại: mở Console rồi gõ __vowelProbe().
+// Vật lý tóc, khẩu hình và việc chuyển clip đều nằm trong core/character.js —
+// bản nhúng embed.js dùng chung đúng cài đặt đó. Ở đây chỉ còn phần giao diện.
+//
+// Tự kiểm tra bộ phân loại nguyên âm: mở Console rồi gõ __vowelProbe().
 // Phải ra "A->A I->I U->U E->E O->O", không có chữ SAI nào.
 window.__vowelProbe = vowelSelfTest;
-
-function updateLipSync(delta) {
-    if (!analyser || !audioSpectrumDb) return;
-    analyser.getFloatFrequencyData(audioSpectrumDb);
-
-    // Chỉ nhép khi bản đang phát thực sự có giọng hát. Đây là điều khai báo
-    // trong scripts/catalog.py chứ không phải đoán từ tín hiệu — xem chú thích
-    // ở đó để biết vì sao không đoán được.
-    let guess = null;
-    if (isAudioPlaying && currentTrack.vocals) {
-        const loud = loudnessGate.level(audioSpectrumDb, audioContext.sampleRate, delta);
-        if (loud > VOICE_ONSET) {
-            guess = classifyVowel(audioSpectrumDb, audioContext.sampleRate);
-            if (guess) guess.openness = Math.min(1, (loud - VOICE_ONSET) / 0.55);
-        }
-    }
-
-    for (const key in visemeWeights) {
-        const target = guess && guess.key === key ? guess.openness : 0;
-        const rate = target > visemeWeights[key] ? VISEME_ATTACK : VISEME_RELEASE;
-        visemeWeights[key] += (target - visemeWeights[key]) * Math.min(1, rate * delta);
-    }
-
-    const slot = {
-        A: morphIndices.mouthA, I: morphIndices.mouthI, U: morphIndices.mouthU,
-        E: morphIndices.mouthE, O: morphIndices.mouthO,
-    };
-    morphMeshes.forEach(mesh => {
-        if (!mesh.morphTargetInfluences) return;
-        for (const key in slot) {
-            if (slot[key] >= 0) mesh.morphTargetInfluences[slot[key]] = visemeWeights[key] * 0.92;
-        }
-    });
-}
 
 function updateAnimationHUD(clipName) {
     let hud = document.getElementById('anim-hud');
@@ -842,14 +719,12 @@ function updateAnimationHUD(clipName) {
 }
 
 window.switchAnimationState = function(clipName) {
-    if (!mixer) return;
-    const nextAction = animationsMap[clipName];
-    if (!nextAction) {
+    if (!character) return;
+    if (!animationsMap[clipName]) {
         console.warn('Không có clip', clipName, '— các clip có trong model:',
                      Object.keys(animationsMap));
         return;
     }
-
     document.querySelectorAll('.state-btn').forEach(b => {
         b.classList.remove('active');
         b.style.background = 'transparent';
@@ -860,22 +735,10 @@ window.switchAnimationState = function(clipName) {
         const st = stateByClip[clipName];
         if (st) btn.style.background = hexToRgba(st.accent, 0.18);
     }
-
-    if (nextAction === currentAction) return;
-
-    // fadeOut chỉ hạ trọng số về 0 chứ không dừng action: nó vẫn được mixer
-    // tính lại mỗi frame, mãi mãi. Đổi qua đủ 18 trạng thái là 18 action cùng
-    // chạy. Hẹn dừng hẳn khi hoà xong, trừ khi người dùng quay lại đúng nó.
-    const prev = currentAction;
-    if (prev) {
-        prev.fadeOut(STATE_FADE);
-        setTimeout(() => {
-            if (currentAction !== prev) prev.stop();
-        }, STATE_FADE * 1000 + 60);
-    }
-    nextAction.reset().fadeIn(STATE_FADE).play();
-    currentAction = nextAction;
-    currentActionName = clipName;
+    // Character.setState lo phần hoà mềm và dừng hẳn clip cũ.
+    if (!character.setState(clipName)) return;
+    currentAction = character.current;
+    currentActionName = character.currentName;
     updateAnimationHUD(clipName);
 };
 
@@ -980,9 +843,19 @@ function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
-    if (mixer) {
-        mixer.update(delta);
-        hairPhysics.update(delta);
+    // Character lo cả ba: chạy mixer, mô phỏng tóc, và khẩu hình theo nguyên âm.
+    if (character) {
+        const lipToggle = document.getElementById('toggle-auto-lipsync');
+        let audio = null;
+        if (isAudioPlaying && analyser && audioSpectrumDb) {
+            analyser.getFloatFrequencyData(audioSpectrumDb);
+            audio = {
+                spectrumDb: audioSpectrumDb,
+                sampleRate: audioContext.sampleRate,
+                vocals: currentTrack.vocals && (!lipToggle || lipToggle.checked),
+            };
+        }
+        character.update(delta, audio);
     }
 
     if (skeletonHelper && skeletonHelper.visible) {
@@ -992,7 +865,7 @@ function animate() {
     // SNAPPY BLINK & PLAYFUL WINK
     updateFacialAnimation(delta);
 
-    // Audio Analysis & Reactive Viseme Blending (Mouth only)
+    // Mức âm thanh thô, chỉ để hiệu ứng lấp lánh nhún theo nhạc.
     if (isAudioPlaying && analyser && audioDataArray) {
         analyser.getByteFrequencyData(audioDataArray);
         let sum = 0;
@@ -1000,10 +873,6 @@ function animate() {
         currentVocalEnergy = Math.min(1.0, (sum / 56) / 120);
     } else {
         currentVocalEnergy = 0;
-    }
-    const lipsyncToggle = document.getElementById('toggle-auto-lipsync');
-    if (!lipsyncToggle || lipsyncToggle.checked) {
-        updateLipSync(delta);
     }
 
     // Gentle Sparkle Float

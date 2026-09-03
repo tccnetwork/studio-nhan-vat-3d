@@ -28,8 +28,8 @@ export async function createSinger(target, options = {}) {
         background: options.background ?? 0x160d24,
         controls: options.controls ?? true,
         autoRotate: options.autoRotate ?? false,
-        target: options.lookAt ?? [0, 1.05, 0],
-        distance: options.distance ?? 2.6,
+        margin: options.margin ?? 1.14,   // chừa quanh nhân vật bao nhiêu
+        distance: options.distance ?? null,  // null = tự tính từ hộp bao
         exposure: options.exposure ?? 1.35,
         ...options,
     };
@@ -77,10 +77,29 @@ export async function createSinger(target, options = {}) {
         controls.autoRotate = opts.autoRotate;
         controls.autoRotateSpeed = 1.2;
     }
-    const lookAt = new THREE.Vector3(...opts.target);
-    camera.position.set(0, lookAt.y + 0.35, opts.distance);
-    if (controls) { controls.target.copy(lookAt); controls.update(); }
-    else camera.lookAt(lookAt);
+    // Khung hình tính từ hộp bao thật thay vì đặt cứng khoảng cách: khung chủ
+    // nhà cao thấp rộng hẹp thế nào cũng phải thấy trọn nhân vật.
+    const box = new THREE.Box3().setFromObject(character.root);
+    const size = box.getSize(new THREE.Vector3());
+    const lookAt = options.lookAt
+        ? new THREE.Vector3(...options.lookAt)
+        : box.getCenter(new THREE.Vector3());
+    // Hộp bao của lưới có xương lấy theo tư thế bind, tức là hai tay dang ngang
+    // nên rộng hơn nhân vật đang đứng nhiều. Dùng chiều cao làm chuẩn, chiều
+    // ngang chỉ lấy một phần để không bị lùi ra quá xa.
+    const shownWidth = Math.min(size.x, size.y * 0.55);
+
+    function fitCamera() {
+        if (opts.distance !== null) { camera.position.set(0, lookAt.y, opts.distance); return; }
+        const vFov = THREE.MathUtils.degToRad(camera.fov);
+        const forHeight = (size.y / 2) / Math.tan(vFov / 2);
+        const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+        const forWidth = (shownWidth / 2) / Math.tan(hFov / 2);
+        const d = Math.max(forHeight, forWidth) * opts.margin;
+        camera.position.set(0, lookAt.y, d);
+        if (controls) controls.target.copy(lookAt);
+        camera.lookAt(lookAt);
+    }
 
     // --- âm thanh, chỉ dựng khi được yêu cầu ---
     let audioCtx = null, analyser = null, spectrum = null, audioEl = null, track = null;
@@ -116,6 +135,8 @@ export async function createSinger(target, options = {}) {
         renderer.setSize(w, h, false);
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
+        fitCamera();
+        if (controls) controls.update();
     }
     const ro = new ResizeObserver(resize);
     ro.observe(el);

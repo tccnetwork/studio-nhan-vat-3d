@@ -77,7 +77,9 @@ export class Character {
                 else if (key.includes('MTH_O')) this.morphIndices.O = i;
             }
         }
-        this.hair.build(this.root);
+        // Không dựng lò xo tóc ở đây: lúc này model chưa vào cảnh và chưa được
+        // đặt đúng chỗ, nên vị trí chóp tóc ban đầu sẽ lệch và tóc bị giật lên
+        // ở frame đầu. Dựng ở lần update() đầu tiên, khi ma trận đã đúng.
     }
 
     get stateNames() { return this.manifest.states.map(s => s.clip); }
@@ -119,6 +121,11 @@ export class Character {
     /** delta tính bằng giây. audio là { spectrumDb, sampleRate, vocals } hoặc null. */
     update(delta, audio = null) {
         this.mixer.update(delta);
+        if (!this._hairReady) {
+            this.root.updateMatrixWorld(true);
+            this.hair.build(this.root);
+            this._hairReady = true;
+        }
         this.hair.update(delta);
         this._updateVisemes(delta, audio);
     }

@@ -137,6 +137,10 @@ cùng ba danh sách `states` / `hairstyles` / `audioTracks` đọc thẳng từ 
 Đường dẫn tài nguyên suy ra từ vị trí của chính `embed.js`, đổi được bằng tuỳ
 chọn `base`. Không có tuỳ chọn nào bắt buộc.
 
+Khung hình **tự tính từ hộp bao của model** và tính lại mỗi khi khung đổi kích
+thước, nên khung chủ nhà cao thấp rộng hẹp thế nào cũng thấy trọn nhân vật.
+Đặt `distance` nếu muốn tự quyết, `margin` để chừa nhiều hay ít quanh nhân vật.
+
 **Trang studio và bản nhúng dùng chung `web/core/`** — vật lý tóc, bộ phân loại
 nguyên âm và phần nạp model chỉ có một cài đặt duy nhất.
 
