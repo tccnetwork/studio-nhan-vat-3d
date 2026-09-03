@@ -31,8 +31,8 @@
   <h1>Nhúng nhân vật vào một trang bất kỳ</h1>
   <p>Trang này không dùng gì của studio ngoài <code>web/embed.js</code>. Toàn bộ
      mã cần thiết nằm trong khối bên dưới.</p>
-  <p style="font-size:13px;color:#7e879b">Kéo chuột trong khung để xoay quanh
-     nhân vật · cuộn để phóng to thu nhỏ · chuột phải hoặc hai ngón để dịch.</p>
+  <p style="font-size:13px;color:#7e879b" id="hint"></p>
+  <div class="row" id="mode" style="margin:0 0 10px"></div>
   <div id="slot"></div>
   <div class="row" id="states"></div>
   <div class="row" id="hairs"></div>
@@ -52,6 +52,18 @@ const mk = (host, label, fn) => {
   host.appendChild(b);
   return b;
 };
+const hint = document.getElementById('hint');
+const setHint = () => {
+  hint.textContent = singer.dragMode === 'dichuyen'
+    ? 'Kéo chuột trái để DỜI nhân vật trong khung · chuột phải để xoay · cuộn để phóng to thu nhỏ.'
+    : 'Kéo chuột trái để XOAY quanh nhân vật · chuột phải để dời · cuộn để phóng to thu nhỏ.';
+};
+const modeHost = document.getElementById('mode');
+mk(modeHost, '🔄 Kéo để xoay', () => { singer.setDragMode('xoay'); setHint(); }).classList.add('on');
+mk(modeHost, '✥ Kéo để dời nhân vật', () => { singer.setDragMode('dichuyen'); setHint(); });
+mk(modeHost, '🎯 Về khung mặc định', () => { singer.resetView(); });
+setHint();
+
 singer.states.forEach(s => mk(document.getElementById('states'),
   `${s.icon} ${s.label}`, () => singer.setState(s.clip)));
 singer.hairstyles.forEach(h => mk(document.getElementById('hairs'),
@@ -60,7 +72,6 @@ singer.audioTracks.forEach(t => mk(document.getElementById('audio'),
   `${t.icon} ${t.label}${t.vocals ? '' : ' (không nhép miệng)'}`,
   () => singer.playAudio(t.file)));
 mk(document.getElementById('audio'), '⏸ Dừng nhạc', () => singer.pauseAudio());
-mk(document.getElementById('audio'), '🎯 Về khung mặc định', () => singer.resetView());
 
 document.getElementById('code').textContent =
 `import { createSinger } from './web/embed.js';

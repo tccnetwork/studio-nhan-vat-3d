@@ -167,10 +167,21 @@ Khung hình **tự tính từ hộp bao của model** và tính lại mỗi khi 
 thước, nên khung chủ nhà cao thấp rộng hẹp thế nào cũng thấy trọn nhân vật.
 Đặt `distance` nếu muốn tự quyết, `margin` để chừa nhiều hay ít quanh nhân vật.
 
-Trong khung, người xem **kéo chuột để xoay quanh nhân vật, cuộn để phóng to thu
-nhỏ, chuột phải hoặc hai ngón để dịch**. Từ lúc họ đụng vào, việc khung đổi kích
-thước sẽ không canh lại góc nhìn nữa — canh lại lúc đó là giật view ngay giữa
-khi họ đang xoay. Gọi `singer.resetView()` để đưa về khung mặc định.
+Trong khung có hai kiểu kéo, đổi bằng `singer.setDragMode(...)` hoặc tuỳ chọn
+`dragMode` lúc khởi tạo:
+
+| | kéo chuột trái | chuột phải |
+| :-- | :-- | :-- |
+| `'xoay'` (mặc định) | xoay quanh nhân vật | dời nhân vật |
+| `'dichuyen'` | **dời nhân vật** trong khung | xoay |
+
+Cuộn chuột để phóng to thu nhỏ, giới hạn 0,4 – 12 m. Tâm nhìn bị **chốt trong
+bán kính 0,75 m quanh nhân vật**, nên một cú kéo hụt không làm mất dấu nhân vật
+— thiếu chốt này thì kéo mạnh một cái là nó ra hẳn ngoài mép khung.
+
+Từ lúc người xem đụng vào, việc khung đổi kích thước không canh lại góc nhìn
+nữa — canh lại lúc đó là giật view ngay giữa khi họ đang xoay.
+`singer.resetView()` đưa về khung mặc định.
 
 Tắt bằng `controls: false` cho một bản nhúng tĩnh, hoặc `zoom: false` /
 `pan: false` để chỉ cho xoay.

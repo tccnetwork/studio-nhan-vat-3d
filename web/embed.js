@@ -69,6 +69,7 @@ export async function createSinger(target, options = {}) {
     if (options.hairstyle) character.setHairstyle(options.hairstyle);
 
     let userMoved = false;
+    let dragMode = options.dragMode ?? 'xoay';
     let controls = null;
     if (opts.controls) {
         controls = new OrbitControls(camera, renderer.domElement);
@@ -81,8 +82,12 @@ export async function createSinger(target, options = {}) {
         controls.enablePan = options.pan ?? true;
         controls.minDistance = 0.4;
         controls.maxDistance = 12;
+        controls.screenSpacePanning = true;   // kéo lên là nhân vật đi lên
         // Người dùng đã tự đặt góc nhìn thì đừng kéo họ về chỗ cũ nữa.
         controls.addEventListener('start', () => { userMoved = true; });
+        // Không cho nhân vật trôi hẳn ra khỏi khung: giới hạn tâm nhìn quanh
+        // chính nhân vật. Thiếu chốt này thì chỉ một cú kéo hụt là mất dấu.
+        controls.addEventListener('change', clampTarget);
     }
     // Khung hình tính từ hộp bao thật thay vì đặt cứng khoảng cách: khung chủ
     // nhà cao thấp rộng hẹp thế nào cũng phải thấy trọn nhân vật.
@@ -91,10 +96,41 @@ export async function createSinger(target, options = {}) {
     const lookAt = options.lookAt
         ? new THREE.Vector3(...options.lookAt)
         : box.getCenter(new THREE.Vector3());
+    setDragMode(dragMode);
     // Hộp bao của lưới có xương lấy theo tư thế bind, tức là hai tay dang ngang
     // nên rộng hơn nhân vật đang đứng nhiều. Dùng chiều cao làm chuẩn, chiều
     // ngang chỉ lấy một phần để không bị lùi ra quá xa.
     const shownWidth = Math.min(size.x, size.y * 0.55);
+
+    const PAN_LIMIT = 0.75;               // mét, tính từ tâm nhân vật
+
+    function clampTarget() {
+        if (!controls) return;
+        const t = controls.target;
+        const before = t.clone();
+        t.x = THREE.MathUtils.clamp(t.x, lookAt.x - PAN_LIMIT, lookAt.x + PAN_LIMIT);
+        t.y = THREE.MathUtils.clamp(t.y, lookAt.y - PAN_LIMIT, lookAt.y + PAN_LIMIT);
+        t.z = THREE.MathUtils.clamp(t.z, lookAt.z - PAN_LIMIT, lookAt.z + PAN_LIMIT);
+        // Dời camera đúng bằng phần vừa cắt, nếu không góc nhìn sẽ bị xoay lệch.
+        camera.position.add(t.clone().sub(before));
+    }
+
+    /** 'xoay' — kéo trái để xoay quanh nhân vật (mặc định).
+     *  'dichuyen' — kéo trái để dời nhân vật trong khung. */
+    function setDragMode(mode) {
+        if (!controls) return;
+        const pan = mode === 'dichuyen';
+        controls.mouseButtons = {
+            LEFT: pan ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE,
+            MIDDLE: THREE.MOUSE.DOLLY,
+            RIGHT: pan ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN,
+        };
+        controls.touches = {
+            ONE: pan ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE,
+            TWO: THREE.TOUCH.DOLLY_PAN,
+        };
+        dragMode = mode;
+    }
 
     function fitCamera() {
         if (opts.distance !== null) { camera.position.set(0, lookAt.y, opts.distance); return; }
@@ -185,7 +221,15 @@ export async function createSinger(target, options = {}) {
         },
         pauseAudio() { if (audioEl) audioEl.pause(); playing = false; },
         /** Đưa góc nhìn về khung mặc định. */
-        resetView() { userMoved = false; fitCamera(); if (controls) controls.update(); },
+        resetView() {
+            userMoved = false;
+            if (controls) controls.target.copy(lookAt);
+            fitCamera();
+            if (controls) controls.update();
+        },
+        /** 'xoay' hoặc 'dichuyen' — quyết định kéo chuột trái làm gì. */
+        setDragMode,
+        get dragMode() { return dragMode; },
         destroy() {
             alive = false;
             ro.disconnect();
