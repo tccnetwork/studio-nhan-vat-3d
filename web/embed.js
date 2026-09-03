@@ -93,15 +93,13 @@ export async function createSinger(target, options = {}) {
         controls.autoRotate = opts.autoRotate;
         controls.autoRotateSpeed = 1.2;
         controls.enableZoom = options.zoom ?? true;
-        controls.enablePan = options.pan ?? true;
+        // Pan của OrbitControls tắt hẳn: nó dời tâm xoay, mà tâm xoay phải luôn
+        // nằm ở nhân vật. Việc dời nhân vật do camera.setViewOffset đảm nhiệm.
+        controls.enablePan = false;
         controls.minDistance = 0.4;
         controls.maxDistance = 12;
-        controls.screenSpacePanning = true;   // kéo lên là nhân vật đi lên
         // Người dùng đã tự đặt góc nhìn thì đừng kéo họ về chỗ cũ nữa.
         controls.addEventListener('start', () => { userMoved = true; });
-        // Không cho nhân vật trôi hẳn ra khỏi khung: giới hạn tâm nhìn quanh
-        // chính nhân vật. Thiếu chốt này thì chỉ một cú kéo hụt là mất dấu.
-        controls.addEventListener('change', clampTarget);
     }
     // Khung hình tính từ hộp bao thật thay vì đặt cứng khoảng cách: khung chủ
     // nhà cao thấp rộng hẹp thế nào cũng phải thấy trọn nhân vật.
@@ -116,56 +114,73 @@ export async function createSinger(target, options = {}) {
     // ngang chỉ lấy một phần để không bị lùi ra quá xa.
     const shownWidth = Math.min(size.x, size.y * 0.55);
 
-    // Chốt tâm nhìn theo **tỉ lệ khung nhìn**, không theo một khoảng cách cố
-    // định trong không gian 3D. Phần nhìn thấy rộng bao nhiêu là do mức phóng
-    // to quyết định: ở khoảng cách nhỏ nhất (0,4 m) thì nửa bề rộng khung chỉ
-    // khoảng 0,3 m, nên một chốt cứng 0,75 m cho phép kéo nhân vật ra hẳn
-    // ngoài khung. Tính theo tỉ lệ thì mức phóng to nào cũng giữ được nhân vật
-    // trong khung.
-    const PAN_FRACTION = options.panFraction ?? 0.30;   // 0,30 = lệch nhiều nhất 30% nửa khung
+    // Dời nhân vật trong khung KHÔNG được đụng tới tâm xoay.
+    //
+    // Thao tác pan của OrbitControls dịch cả tâm xoay lẫn máy quay. Dời nhân
+    // vật một chút là tâm xoay rời khỏi nhân vật, rồi xoay thì nhân vật văng
+    // vòng quanh một điểm ở xa — đúng hiện tượng chủ dự án gặp. Hai bản chốt
+    // trước của tôi chỉ giới hạn tâm xoay đi bao xa, tức là chữa triệu chứng.
+    //
+    // Ở đây tâm xoay bị khoá cứng vào nhân vật (pan của OrbitControls tắt hẳn),
+    // còn việc dời nhân vật làm bằng camera.setViewOffset — dịch khung ảnh chứ
+    // không dịch máy quay. Xoay vì thế luôn quay quanh nhân vật, ở mọi lúc.
+    const KEEP = options.keepInside ?? 0.18;   // lề tối thiểu quanh khung, 0..0.5
+    const frameOffset = { x: 0, y: 0 };        // pixel
 
-    function viewHalfExtent() {
-        const dist = camera.position.distanceTo(controls ? controls.target : lookAt);
-        const halfH = dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-        return { h: halfH, w: halfH * camera.aspect };
+    function applyFrameOffset() {
+        const w = el.clientWidth || 1, h = el.clientHeight || 1;
+        const maxX = (0.5 - KEEP) * w, maxY = (0.5 - KEEP) * h;
+        frameOffset.x = THREE.MathUtils.clamp(frameOffset.x, -maxX, maxX);
+        frameOffset.y = THREE.MathUtils.clamp(frameOffset.y, -maxY, maxY);
+        if (frameOffset.x === 0 && frameOffset.y === 0) camera.clearViewOffset();
+        else camera.setViewOffset(w, h, -frameOffset.x, -frameOffset.y, w, h);
     }
 
-    function clampTarget() {
-        if (!controls) return;
-        const t = controls.target;
-        const before = t.clone();
-        const ext = viewHalfExtent();
-        const limX = ext.w * PAN_FRACTION;
-        const limY = ext.h * PAN_FRACTION;
-        // Kéo ngang trong mặt phẳng màn hình có thể rơi vào cả X lẫn Z tuỳ góc
-        // xoay, nên chặn theo khoảng cách nằm ngang chứ không chặn từng trục.
-        const dx = t.x - lookAt.x, dz = t.z - lookAt.z;
-        const flat = Math.hypot(dx, dz);
-        if (flat > limX && flat > 1e-6) {
-            const k = limX / flat;
-            t.x = lookAt.x + dx * k;
-            t.z = lookAt.z + dz * k;
-        }
-        t.y = THREE.MathUtils.clamp(t.y, lookAt.y - limY, lookAt.y + limY);
-        // Dời camera đúng bằng phần vừa cắt, nếu không góc nhìn sẽ bị xoay lệch.
-        camera.position.add(t.clone().sub(before));
+    /** Nhân vật đang nằm đâu trên khung, tính bằng phần trăm. 50/50 là giữa. */
+    function screenPos() {
+        const w = el.clientWidth || 1, h = el.clientHeight || 1;
+        return { x: 50 + frameOffset.x / w * 100, y: 50 + frameOffset.y / h * 100 };
     }
+
+    // --- kéo để dời: tự xử lý, không mượn pan của OrbitControls ---
+    let dragging = false, lastX = 0, lastY = 0;
+    renderer.domElement.addEventListener('pointerdown', e => {
+        if (dragMode !== 'dichuyen' || e.button !== 0) return;
+        dragging = true; userMoved = true;
+        lastX = e.clientX; lastY = e.clientY;
+        renderer.domElement.setPointerCapture(e.pointerId);
+        e.preventDefault();
+    });
+    renderer.domElement.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        frameOffset.x += e.clientX - lastX;
+        frameOffset.y += e.clientY - lastY;
+        lastX = e.clientX; lastY = e.clientY;
+        applyFrameOffset();
+    });
+    const endDrag = e => {
+        if (!dragging) return;
+        dragging = false;
+        try { renderer.domElement.releasePointerCapture(e.pointerId); } catch (_) {}
+    };
+    renderer.domElement.addEventListener('pointerup', endDrag);
+    renderer.domElement.addEventListener('pointercancel', endDrag);
 
     /** 'xoay' — kéo trái để xoay quanh nhân vật (mặc định).
-     *  'dichuyen' — kéo trái để dời nhân vật trong khung. */
+     *  'dichuyen' — kéo trái để dời nhân vật trong khung, xoay chuyển sang chuột phải. */
     function setDragMode(mode) {
+        dragMode = mode;
         if (!controls) return;
-        const pan = mode === 'dichuyen';
+        const move = mode === 'dichuyen';
         controls.mouseButtons = {
-            LEFT: pan ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE,
+            LEFT: move ? null : THREE.MOUSE.ROTATE,
             MIDDLE: THREE.MOUSE.DOLLY,
-            RIGHT: pan ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN,
+            RIGHT: THREE.MOUSE.ROTATE,
         };
         controls.touches = {
-            ONE: pan ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE,
-            TWO: THREE.TOUCH.DOLLY_PAN,
+            ONE: move ? null : THREE.TOUCH.ROTATE,
+            TWO: THREE.TOUCH.DOLLY_ROTATE,
         };
-        dragMode = mode;
     }
 
     function fitCamera() {
@@ -214,6 +229,7 @@ export async function createSinger(target, options = {}) {
         renderer.setSize(w, h, false);
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
+        applyFrameOffset();
         // Chỉ canh lại khung khi người dùng chưa đụng vào. Canh lại sau đó là
         // giật view về chỗ cũ ngay giữa lúc họ đang xoay.
         if (!userMoved) {
@@ -239,8 +255,10 @@ export async function createSinger(target, options = {}) {
     function updateHud() {
         if (!hud) return;
         const v = view();
+        const sp = screenPos();
         hud.textContent =
-            `tâm nhìn   x ${fmt(v.target.x)}  y ${fmt(v.target.y)}  z ${fmt(v.target.z)}\n`
+            `nhân vật trên khung   ${sp.x.toFixed(0)}% ngang   ${sp.y.toFixed(0)}% dọc\n`
+            + `tâm nhìn   x ${fmt(v.target.x)}  y ${fmt(v.target.y)}  z ${fmt(v.target.z)}\n`
             + `máy quay   x ${fmt(v.camera.x)}  y ${fmt(v.camera.y)}  z ${fmt(v.camera.z)}\n`
             + `khoảng cách ${v.distance.toFixed(2)} m   ·   ${dragMode === 'dichuyen' ? 'kéo = dời' : 'kéo = xoay'}`;
     }
@@ -280,6 +298,8 @@ export async function createSinger(target, options = {}) {
         /** Đưa góc nhìn về khung mặc định. */
         resetView() {
             userMoved = false;
+            frameOffset.x = 0; frameOffset.y = 0;
+            applyFrameOffset();
             if (controls) controls.target.copy(lookAt);
             fitCamera();
             if (controls) controls.update();
@@ -289,6 +309,8 @@ export async function createSinger(target, options = {}) {
         get dragMode() { return dragMode; },
         /** Toạ độ hiện tại: tâm nhìn, vị trí máy quay, khoảng cách. */
         getView: view,
+        /** Vị trí nhân vật trên khung, phần trăm. */
+        getScreenPos: screenPos,
         /** Bật tắt ô hiển thị toạ độ trong khung. */
         showCoords(on) {
             if (on && !hud) {
