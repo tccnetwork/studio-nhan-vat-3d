@@ -63,6 +63,13 @@ mk(modeHost, '🔄 Kéo để xoay', () => { singer.setDragMode('xoay'); setHint
 mk(modeHost, '✥ Kéo để dời nhân vật', () => { singer.setDragMode('dichuyen'); setHint(); });
 mk(modeHost, '🎯 Về khung mặc định', () => { singer.resetView(); });
 let coordsOn = true;
+mk(modeHost, '📋 Chép khung hình này', () => {
+  const fr = singer.getFraming();
+  const snippet = 'const singer = await createSinger(\'#slot\', {\n'
+    + '  framing: ' + JSON.stringify(fr) + ',\n});';
+  document.getElementById('code').textContent = snippet;
+  navigator.clipboard && navigator.clipboard.writeText(snippet).catch(() => {});
+});
 const coordsBtn = mk(modeHost, '📐 Ẩn toạ độ', () => {
   coordsOn = !coordsOn;
   singer.showCoords(coordsOn);

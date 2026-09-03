@@ -126,6 +126,7 @@ export async function createSinger(target, options = {}) {
     // không dịch máy quay. Xoay vì thế luôn quay quanh nhân vật, ở mọi lúc.
     const KEEP = options.keepInside ?? 0.18;   // lề tối thiểu quanh khung, 0..0.5
     const frameOffset = { x: 0, y: 0 };        // pixel
+    const _probe = new THREE.Vector3();
 
     function applyFrameOffset() {
         const w = el.clientWidth || 1, h = el.clientHeight || 1;
@@ -136,10 +137,15 @@ export async function createSinger(target, options = {}) {
         else camera.setViewOffset(w, h, -frameOffset.x, -frameOffset.y, w, h);
     }
 
-    /** Nhân vật đang nằm đâu trên khung, tính bằng phần trăm. 50/50 là giữa. */
+    /** Nhân vật đang nằm đâu trên khung, tính bằng phần trăm. 50/50 là giữa.
+     *
+     *  Đo bằng phép chiếu thật qua ma trận của máy quay, KHÔNG suy ra từ biến
+     *  frameOffset. Suy ra từ biến nội bộ là tự soi lại chính mình: nếu biến đó
+     *  lệch với thứ đang hiển thị thì con số vẫn đẹp mà vẫn sai. */
     function screenPos() {
-        const w = el.clientWidth || 1, h = el.clientHeight || 1;
-        return { x: 50 + frameOffset.x / w * 100, y: 50 + frameOffset.y / h * 100 };
+        camera.updateMatrixWorld();
+        _probe.copy(lookAt).project(camera);
+        return { x: _probe.x * 50 + 50, y: 50 - _probe.y * 50 };
     }
 
     // --- kéo để dời: tự xử lý, không mượn pan của OrbitControls ---
@@ -183,16 +189,65 @@ export async function createSinger(target, options = {}) {
         };
     }
 
+    /** Khung hình hiện tại, ở dạng dán thẳng vào createSinger được. */
+    function getFraming() {
+        const w = el.clientWidth || 1, h = el.clientHeight || 1;
+        const off = camera.position.clone().sub(controls ? controls.target : lookAt);
+        const dist = off.length();
+        return {
+            distance: +dist.toFixed(3),
+            azimuth: +Math.atan2(off.x, off.z).toFixed(4),      // radian, 0 = nhìn từ trước
+            polar: +Math.acos(THREE.MathUtils.clamp(off.y / dist, -1, 1)).toFixed(4),
+            frameOffset: {
+                x: +(frameOffset.x / w).toFixed(4),             // tỉ lệ bề rộng khung
+                y: +(frameOffset.y / h).toFixed(4),
+            },
+        };
+    }
+
+    function applyFraming(fr) {
+        if (!fr) return;
+        const w = el.clientWidth || 1, h = el.clientHeight || 1;
+        if (fr.frameOffset) {
+            frameOffset.x = (fr.frameOffset.x ?? 0) * w;
+            frameOffset.y = (fr.frameOffset.y ?? 0) * h;
+            applyFrameOffset();
+        }
+        const dist = fr.distance ?? camera.position.distanceTo(lookAt);
+        const az = fr.azimuth ?? 0, po = fr.polar ?? Math.PI / 2;
+        const t = controls ? controls.target : lookAt;
+        camera.position.set(
+            t.x + dist * Math.sin(po) * Math.sin(az),
+            t.y + dist * Math.cos(po),
+            t.z + dist * Math.sin(po) * Math.cos(az));
+        camera.lookAt(t);
+        if (controls) controls.update();
+        userMoved = true;      // đã có khung hình chỉ định thì đừng tự canh lại
+    }
+
+    // Góc nhìn mặc định hơi chếch sang bên và hơi cao, theo đúng khung mà chủ
+    // dự án tự căn tay — nhìn thẳng trực diện trông phẳng và cứng hơn.
+    const DEF_AZIMUTH = options.azimuth ?? -0.079;   // radian
+    const DEF_POLAR = options.polar ?? 1.486;
+
+    function placeCamera(dist) {
+        const t = controls ? controls.target : lookAt;
+        camera.position.set(
+            t.x + dist * Math.sin(DEF_POLAR) * Math.sin(DEF_AZIMUTH),
+            t.y + dist * Math.cos(DEF_POLAR),
+            t.z + dist * Math.sin(DEF_POLAR) * Math.cos(DEF_AZIMUTH));
+        camera.lookAt(t);
+    }
+
     function fitCamera() {
-        if (opts.distance !== null) { camera.position.set(0, lookAt.y, opts.distance); return; }
+        if (opts.distance !== null) { placeCamera(opts.distance); return; }
         const vFov = THREE.MathUtils.degToRad(camera.fov);
         const forHeight = (size.y / 2) / Math.tan(vFov / 2);
         const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
         const forWidth = (shownWidth / 2) / Math.tan(hFov / 2);
         const d = Math.max(forHeight, forWidth) * opts.margin;
-        camera.position.set(0, lookAt.y, d);
         if (controls) controls.target.copy(lookAt);
-        camera.lookAt(lookAt);
+        placeCamera(d);
     }
 
     // --- âm thanh, chỉ dựng khi được yêu cầu ---
@@ -240,6 +295,7 @@ export async function createSinger(target, options = {}) {
     const ro = new ResizeObserver(resize);
     ro.observe(el);
     resize();
+    if (options.framing) applyFraming(options.framing);
 
     const fmt = v => (v >= 0 ? ' ' : '') + v.toFixed(2);
 
@@ -309,6 +365,9 @@ export async function createSinger(target, options = {}) {
         get dragMode() { return dragMode; },
         /** Toạ độ hiện tại: tâm nhìn, vị trí máy quay, khoảng cách. */
         getView: view,
+        /** Khung hình hiện tại, dán thẳng vào createSinger({ framing: ... }) được. */
+        getFraming,
+        setFraming: applyFraming,
         /** Vị trí nhân vật trên khung, phần trăm. */
         getScreenPos: screenPos,
         /** Bật tắt ô hiển thị toạ độ trong khung. */

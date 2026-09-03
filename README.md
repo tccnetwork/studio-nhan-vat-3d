@@ -191,8 +191,18 @@ nữa — canh lại lúc đó là giật view ngay giữa khi họ đang xoay.
 Tắt bằng `controls: false` cho một bản nhúng tĩnh, hoặc `zoom: false` /
 `pan: false` để chỉ cho xoay.
 
+Góc nhìn mặc định hơi chếch sang bên và hơi cao (`azimuth −0,079`, `polar
+1,486`) chứ không nhìn thẳng trực diện — trực diện trông phẳng và cứng hơn.
+
+Căn được khung ưng ý rồi thì `singer.getFraming()` trả về đúng bộ số để dán
+ngược vào `createSinger({ framing: ... })`, gồm khoảng cách, hai góc xoay và
+mức dịch khung. Trang demo có nút **Chép khung hình này** làm sẵn việc đó.
+
 Bật `showCoords: true` để hiện toạ độ tâm nhìn, vị trí máy quay và khoảng cách
-ngay trong khung — tiện khi đang căn góc. Mặc định tắt vì bản nhúng trên trang
+ngay trong khung, kèm dòng đầu cho biết **nhân vật đang ở bao nhiêu phần trăm
+khung**. Con số đó đo bằng phép chiếu thật qua ma trận máy quay chứ không suy
+ra từ biến nội bộ — suy ra từ biến nội bộ là tự soi lại chính mình, biến lệch
+với thứ đang hiển thị thì con số vẫn đẹp mà vẫn sai. Mặc định tắt vì bản nhúng trên trang
 thật không nên hiện thông tin gỡ lỗi. Bật tắt lúc chạy bằng
 `singer.showCoords(true|false)`, hoặc lấy số bằng `singer.getView()` nếu muốn
 tự vẽ chỗ khác.
