@@ -211,38 +211,81 @@ def lock_feet(char_arm, act, frames, contact_band=0.03):
     print(f'    khoá bàn chân: chỉnh {fixed} lượt chân-frame về đúng mặt sàn')
 
 
-def level_feet(char_arm, act, frames, max_roll_deg=14.0):
-    """San bằng độ LẬT của bàn chân quanh chính trục dọc của nó.
+# Đặt NO_LEVEL_FEET=1 để dựng bản KHÔNG san lật, dùng khi cần so hai bản.
+LEVEL_FEET = os.environ.get('NO_LEVEL_FEET') != '1'
+
+
+def _signed_roll(fwd, normal, ref):
+    """Góc xoay của normal so với ref, tính QUANH trục fwd, kèm dấu.
+
+    Phải chiếu cả hai vector lên mặt phẳng vuông góc fwd rồi mới lấy góc giữa
+    hai hình chiếu. Thiếu bước chiếu thì độ chúc mũi chân lọt vào kết quả, và
+    ngay cả tư thế T cũng báo lật 30°.
+    """
+    nv = normal - fwd * normal.dot(fwd)
+    rv = ref - fwd * ref.dot(fwd)
+    if nv.length < 1e-4 or rv.length < 1e-4:
+        return None
+    nv.normalize()
+    rv.normalize()
+    a = nv.angle(rv, 0.0)
+    return -a if nv.cross(rv).dot(fwd) < 0 else a
+
+
+def level_feet(char_arm, act, frames, max_ankle_deg=30.0):
+    """Gỡ phần vặn cổ chân vượt quá giới hạn sinh lý.
 
     Vì sao cần: _aim() xoay một xương bằng phép quay cung ngắn nhất tới hướng
     đích. Phép đó khoá được hướng, tức 2 trong 3 bậc tự do, còn góc xoay quanh
     chính hướng ấy thì bỏ trống — nó thừa hưởng độ xoắn tích luỹ dọc chuỗi
-    xương. Với bàn chân, hậu quả là lòng bàn chân quay ngang hoặc ngửa hẳn lên.
+    xương. Với bàn chân, hậu quả là bàn chân vặn rời khỏi ống chân.
 
-    Đo trên bản dựng trước khi có bước này: clip vũ đạo lật tới 180°, clip vũ
-    đạo dài lật quá 45° ở 231 trong 362 lượt chân-frame. Trong khi các clip
-    làm tay chỉ lật 3–10° và tư thế T đúng 0°.
+    ĐO ĐÚNG ĐẠI LƯỢNG là chỗ dễ sai nhất ở đây. Góc giữa lòng bàn chân và
+    hướng lên của THẾ GIỚI thì không bị giới hạn gì: chân xoay ra ngoài hay
+    người nghiêng đều làm nó lớn lên một cách hoàn toàn bình thường. Lần đầu
+    tôi ép theo đại lượng đó và làm hỏng hẳn clip đi bộ — clip ấy góc so với
+    thế giới lên tới 180° nhưng CỔ CHÂN chỉ vặn 27°, tức là vốn không có lỗi;
+    ép xong thì cổ chân vặn 169°.
 
-    Cách sửa: xoay bàn chân quanh trục nối cổ chân với mũi chân. Trục đó đi qua
-    cả hai khớp nên mũi chân KHÔNG dịch chuyển — bước này không phá vị trí chân
-    mà lock_feet vừa đặt. Còn lại một chút lật (max_roll_deg) vì chân xoay ra
-    ngoài đôi chút là chuyện tự nhiên; các clip làm tay cũng nằm trong khoảng ấy.
+    Đại lượng có giới hạn sinh lý là góc giữa bàn chân và CẲNG CHÂN: khớp cổ
+    chân lật trong/lật ngoài được khoảng ±25–30°. Ở đây chỉ gỡ phần vượt quá
+    ngần ấy, và mốc 0 lấy từ chính tư thế nghỉ của bộ xương.
+
+    Phép xoay đặt quanh trục nối cổ chân với mũi chân. Trục đó đi qua cả hai
+    khớp nên mũi chân KHÔNG dịch chuyển — bước này không phá vị trí chân mà
+    lock_feet vừa đặt, và cũng không đụng tới độ chúc mũi chân.
     """
+    if not LEVEL_FEET:
+        print('    san vặn cổ chân: BỎ QUA (NO_LEVEL_FEET=1)')
+        return
     scene = bpy.context.scene
     first, last = frames
     up = Vector((0.0, 0.0, 1.0))            # Blender dựng trục Z lên trời
-    limit = math.radians(max_roll_deg)
+    limit = math.radians(max_ankle_deg)
 
-    # Trục cục bộ nào của bàn chân trỏ lên trời ở tư thế nghỉ. Lấy từ xương
-    # gốc (edit bone) nên độc lập với tư thế đang đặt.
-    rest_up = {}
+    # Trục cục bộ nào của bàn chân trỏ lên trời, và góc vặn cổ chân, đều lấy ở
+    # tư thế nghỉ của bộ xương gốc nên độc lập với tư thế đang đặt.
+    rest = {}
     for side in ('L', 'R'):
-        _, _, foot, _ = LEG_CHAIN[side]
-        eb = char_arm.data.bones.get(foot)
-        if eb is None:
+        _, lower, foot, toe = LEG_CHAIN[side]
+        eb_f = char_arm.data.bones.get(foot)
+        eb_t = char_arm.data.bones.get(toe)
+        eb_l = char_arm.data.bones.get(lower)
+        if None in (eb_f, eb_t, eb_l):
             continue
-        r0 = (char_arm.matrix_world @ eb.matrix_local).to_3x3()
-        rest_up[side] = r0.inverted() @ up
+        mw = char_arm.matrix_world
+        r0 = (mw @ eb_f.matrix_local).to_3x3()
+        a_up = r0.inverted() @ up
+        p_foot = mw @ eb_f.head_local
+        p_toe = mw @ eb_t.head_local
+        p_knee = mw @ eb_l.head_local
+        fwd0 = (p_toe - p_foot)
+        shin0 = (p_knee - p_foot)
+        if fwd0.length < 1e-6 or shin0.length < 1e-6:
+            continue
+        fwd0.normalize()
+        base = _signed_roll(fwd0, r0 @ a_up, shin0.normalized())
+        rest[side] = (a_up, base or 0.0)
 
     worst_before = 0.0
     worst_after = 0.0
@@ -251,33 +294,28 @@ def level_feet(char_arm, act, frames, max_roll_deg=14.0):
         scene.frame_set(f)
         bpy.context.view_layer.update()
         for side in ('L', 'R'):
-            if side not in rest_up:
+            if side not in rest:
                 continue
-            _, _, foot, toe = LEG_CHAIN[side]
+            a_up, base = rest[side]
+            _, lower, foot, toe = LEG_CHAIN[side]
             pf = char_arm.pose.bones.get(foot)
             pt = char_arm.pose.bones.get(toe)
-            if pf is None or pt is None:
+            pl = char_arm.pose.bones.get(lower)
+            if None in (pf, pt, pl):
                 continue
-            fwd = (char_arm.matrix_world @ pt.head) - (char_arm.matrix_world @ pf.head)
-            if fwd.length < 1e-6:
+            mw = char_arm.matrix_world
+            ankle = mw @ pf.head
+            fwd = (mw @ pt.head) - ankle
+            shin = (mw @ pl.head) - ankle
+            if fwd.length < 1e-6 or shin.length < 1e-6:
                 continue
             fwd.normalize()
-            normal = (char_arm.matrix_world @ pf.matrix).to_3x3() @ rest_up[side]
-            # Chiếu cả pháp tuyến lòng bàn chân lẫn mốc so sánh lên mặt phẳng
-            # vuông góc trục dọc. Thiếu bước chiếu thì độ chúc mũi chân lọt vào
-            # kết quả và ngay cả tư thế T cũng báo lật 30°.
-            nv = normal - fwd * normal.dot(fwd)
-            rv = up - fwd * up.dot(fwd)
-            if nv.length < 1e-4 or rv.length < 1e-4:
-                continue                    # bàn chân dựng thẳng đứng, không định nghĩa
-            nv.normalize()
-            rv.normalize()
-            roll = nv.angle(rv, 0.0)
-            # Dấu của góc lật: lấy theo chiều trục dọc.
-            if nv.cross(rv).dot(fwd) < 0:
-                roll = -roll
+            normal = (mw @ pf.matrix).to_3x3() @ a_up
+            roll = _signed_roll(fwd, normal, shin.normalized())
+            if roll is None:
+                continue
+            roll -= base                    # 0 nghĩa là đúng như tư thế nghỉ
             worst_before = max(worst_before, abs(roll))
-            # Chỉ gỡ phần vượt quá mức cho phép.
             excess = 0.0
             if roll > limit:
                 excess = roll - limit
@@ -295,8 +333,8 @@ def level_feet(char_arm, act, frames, max_roll_deg=14.0):
             touched += 1
             worst_after = max(worst_after, abs(roll - excess))
 
-    print(f'    san lật bàn chân: sửa {touched} lượt chân-frame, '
-          f'lật lớn nhất {math.degrees(worst_before):.0f}° '
+    print(f'    san vặn cổ chân: sửa {touched} lượt chân-frame, '
+          f'vặn lớn nhất {math.degrees(worst_before):.0f}° '
           f'-> {math.degrees(worst_after):.0f}°')
 
 

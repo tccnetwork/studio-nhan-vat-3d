@@ -1,30 +1,34 @@
-"""Đo góc lật của bàn chân trong từng clip, bằng động học thuận trên chính GLB.
+#!/usr/bin/env python3
+"""Đo độ vặn của bàn chân trong từng clip, bằng động học thuận trên chính GLB.
 
-Cách đo: ở tư thế nghỉ, tìm trục cục bộ nào của xương bàn chân trỏ lên trời.
-Ở mỗi khung, quay trục đó theo ma trận thế giới của khung ấy rồi lấy góc so
-với hướng lên của thế giới. Góc đó chính là độ lật của lòng bàn chân:
+Đo hai đại lượng khác nhau, và phân biệt được chúng là toàn bộ giá trị của
+công cụ này:
 
-    0°    lòng bàn chân song song mặt sàn
-    ~40°  mũi chân hất lên hoặc gót hất lên khi bước — bình thường
-    >90°  lòng bàn chân đã quay ngửa lên trời — bàn chân bị LẬT
+  CỔ CHÂN   góc giữa bàn chân và CẲNG CHÂN, quanh trục dọc bàn chân. Đây là
+            đại lượng có giới hạn sinh lý: khớp cổ chân lật trong/lật ngoài
+            được khoảng ±25–30°, quá thế là bàn chân vặn rời khỏi ống chân.
+            Chỉ con số này mới nói được clip có lỗi hay không.
 
-Không đo bằng đại lượng nào suy ra từ chính phép retarget, nên kết quả độc lập
-với giả định đã dùng lúc dựng.
-"""
-"""Đo hai góc của bàn chân trong từng clip, bằng động học thuận trên chính GLB.
+  SO THẾ GIỚI  góc giữa lòng bàn chân và hướng lên của thế giới. KHÔNG bị giới
+            hạn gì: chân xoay ra ngoài hay người nghiêng đều làm nó lớn lên
+            một cách hoàn toàn bình thường. Cột này chỉ để tham khảo.
 
-    CHÚC  mũi chân chúc xuống hay hất lên, quanh trục ngang. Bước đi bình
-          thường có góc này, tới 80–90° lúc rướn mũi chân.
-    LẬT   lòng bàn chân quay ngang, quanh chính trục dọc bàn chân. Đây mới là
-          lỗi: quá 45° là bắt đầu thấy lật, 180° là ngửa hẳn lên trời.
+Lẫn hai đại lượng này là một cái bẫy thật, không phải chuyện lý thuyết: lần
+đầu tôi ép bàn chân theo cột SO THẾ GIỚI và làm hỏng hẳn clip đi bộ — clip ấy
+so với thế giới lên tới 180° nhưng cổ chân chỉ vặn 27°, tức vốn không có lỗi;
+ép xong thì cổ chân vặn 169°.
 
-Phải chiếu cả pháp tuyến lòng bàn chân lẫn mốc so sánh lên mặt phẳng vuông góc
-trục dọc rồi mới lấy góc giữa hai hình chiếu. Thiếu bước chiếu thì độ chúc lọt
-vào kết quả và ngay cả tư thế T cũng báo lật 30° — thang đo tự hiệu chuẩn ở
-chỗ đó: T-Pose phải ra đúng 0°.
+Hai điều kiện làm phép đo đúng:
 
-Phép đo này không dùng bất kỳ đại lượng nào suy ra từ chính bộ retarget, nên
-nó kiểm tra được scripts/retarget.py một cách độc lập.
+  * Phải chiếu cả pháp tuyến lòng bàn chân lẫn mốc so sánh lên mặt phẳng vuông
+    góc trục dọc rồi mới lấy góc giữa hai hình chiếu. Thiếu bước chiếu thì độ
+    chúc mũi chân lọt vào kết quả và ngay cả tư thế T cũng báo vặn 30°.
+  * Khi bàn chân gần thẳng hàng với cẳng chân (mũi chân rướn hết), hình chiếu
+    co về 0 và góc vặn không còn xác định. Những khung đó phải bỏ ra, nếu không
+    nhiễu ở đó bị đọc thành lỗi 60°.
+
+Phép đo không dùng bất kỳ đại lượng nào suy ra từ scripts/retarget.py, nên nó
+kiểm tra được bộ retarget một cách độc lập.
 
     python3 tools/foot_roll.py [đường/dẫn.glb]
 """
@@ -37,6 +41,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import glb
 
 NC = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16}
+UP = (0.0, 1.0, 0.0)
+ANKLE_LIMIT = 30.0        # độ, giới hạn sinh lý của khớp cổ chân
+MIN_PROJ = 0.25           # dưới mức này coi như bàn chân thẳng hàng cẳng chân
 
 
 def read_acc(g, blob, i):
@@ -53,48 +60,58 @@ def quat_to_m3(q):
     x, y, z, w = q
     n = math.sqrt(x * x + y * y + z * z + w * w) or 1.0
     x, y, z, w = x / n, y / n, z / n, w / n
-    return [
-        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
-    ]
+    return ((1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)),
+            (2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)),
+            (2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)))
 
 
 def m3_mul(a, b):
-    return [[sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3)]
-            for i in range(3)]
+    return tuple(tuple(sum(a[i][k] * b[k][j] for k in range(3))
+                       for j in range(3)) for i in range(3))
 
 
 def m3_apply(m, v):
-    return [sum(m[i][k] * v[k] for k in range(3)) for i in range(3)]
+    return tuple(sum(m[i][k] * v[k] for k in range(3)) for i in range(3))
 
 
 def m3_t(m):
-    return [[m[j][i] for j in range(3)] for i in range(3)]
+    return tuple(tuple(m[j][i] for j in range(3)) for i in range(3))
 
 
-def build(gltf, blob):
-    nodes = gltf['nodes']
+def dot(a, b):
+    return sum(x * y for x, y in zip(a, b))
+
+
+def cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0])
+
+
+def norm(v):
+    n = math.sqrt(dot(v, v)) or 1.0
+    return tuple(x / n for x in v)
+
+
+def scene_graph(gltf):
     parent = {}
-    for i, n in enumerate(nodes):
+    for i, n in enumerate(gltf['nodes']):
         for c in n.get('children', []):
             parent[c] = i
-    by_name = {n.get('name', ''): i for i, n in enumerate(nodes)}
-    rest_r = {}
-    rest_t = {}
-    for i, n in enumerate(nodes):
-        rest_r[i] = n.get('rotation', [0, 0, 0, 1])
-        rest_t[i] = n.get('translation', [0, 0, 0])
+    by_name = {n.get('name', ''): i for i, n in enumerate(gltf['nodes'])}
+    rest_r = {i: tuple(n.get('rotation', (0, 0, 0, 1)))
+              for i, n in enumerate(gltf['nodes'])}
+    rest_t = {i: tuple(n.get('translation', (0, 0, 0)))
+              for i, n in enumerate(gltf['nodes'])}
     return parent, by_name, rest_r, rest_t
 
 
 def sample(times, values, t):
-    """Lấy mẫu gần nhất theo thời gian — mọi clip đều bake đều nên đủ chính xác."""
-    lo, hi = 0, len(times) - 1
     if t <= times[0]:
         return values[0]
-    if t >= times[hi]:
-        return values[hi]
+    if t >= times[-1]:
+        return values[-1]
+    lo, hi = 0, len(times) - 1
     while hi - lo > 1:
         mid = (lo + hi) // 2
         if times[mid] <= t:
@@ -105,145 +122,124 @@ def sample(times, values, t):
 
 
 def clip_tracks(gltf, blob, anim):
-    names = [n.get('name', '') for n in gltf['nodes']]
     out = {}
     for ch in anim['channels']:
         path = ch['target']['path']
         if path not in ('rotation', 'translation'):
             continue
-        node = ch['target']['node']
         smp = anim['samplers'][ch['sampler']]
         times = [x[0] for x in read_acc(gltf, blob, smp['input'])]
-        vals = read_acc(gltf, blob, smp['output'])
-        out.setdefault(node, {})[path] = (times, vals)
+        out.setdefault(ch['target']['node'], {})[path] = (
+            times, read_acc(gltf, blob, smp['output']))
     return out
 
 
-def world_rot(node, chain_cache, parent, tracks, rest_r, t):
-    if node in chain_cache:
-        return chain_cache[node]
-    tr = tracks.get(node, {})
-    if 'rotation' in tr:
-        q = sample(tr['rotation'][0], tr['rotation'][1], t)
-    else:
-        q = rest_r[node]
-    local = quat_to_m3(q)
-    p = parent.get(node)
-    if p is None:
-        w = local
-    else:
-        w = m3_mul(world_rot(p, chain_cache, parent, tracks, rest_r, t), local)
-    chain_cache[node] = w
-    return w
-
-
-def norm(v):
-    n = math.sqrt(sum(x * x for x in v)) or 1.0
-    return [x / n for x in v]
-
-
-def cross(a, b):
-    return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]
-
-
-def dot(a, b):
-    return sum(x * y for x, y in zip(a, b))
-
-
-def world_pos(node, parent, tracks, rest_r, rest_t, t):
-    """Vị trí thế giới của một khớp, tính cả phần dịch chuyển có hoạt hoá."""
+def world(node, parent, tracks, rest_r, rest_t, t):
+    """Vị trí và ma trận xoay của một khớp trong hệ thế giới."""
     chain = []
     n = node
     while n is not None:
         chain.append(n)
         n = parent.get(n)
-    p = [0.0, 0.0, 0.0]
-    m = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    p = (0.0, 0.0, 0.0)
+    m = ((1, 0, 0), (0, 1, 0), (0, 0, 1))
     for n in reversed(chain):
         tr = tracks.get(n, {})
         q = sample(*tr['rotation'], t) if 'rotation' in tr else rest_r[n]
         tv = sample(*tr['translation'], t) if 'translation' in tr else rest_t[n]
-        p = [p[i] + m_row_dot(m, tv, i) for i in range(3)]
+        p = tuple(p[i] + sum(m[i][k] * tv[k] for k in range(3)) for i in range(3))
         m = m3_mul(m, quat_to_m3(q))
     return p, m
 
 
-def m_row_dot(m, v, i):
-    return sum(m[i][k] * v[k] for k in range(3))
+def signed_roll(fwd, normal, ref):
+    """Góc xoay của normal so với ref, QUANH trục fwd. Trả về (góc, độ tin)."""
+    nv = tuple(normal[i] - fwd[i] * dot(fwd, normal) for i in range(3))
+    rv = tuple(ref[i] - fwd[i] * dot(fwd, ref) for i in range(3))
+    ln, lr = math.sqrt(dot(nv, nv)), math.sqrt(dot(rv, rv))
+    if ln < 1e-6 or lr < 1e-6:
+        return None, 0.0
+    nv, rv = norm(nv), norm(rv)
+    a = math.degrees(math.acos(max(-1.0, min(1.0, dot(nv, rv)))))
+    if dot(cross(nv, rv), fwd) < 0:
+        a = -a
+    return a, min(ln, lr)
+
+
+def measure(model):
+    gltf, blob = glb.read(model)
+    parent, by_name, rest_r, rest_t = scene_graph(gltf)
+    rows = []
+    for anim in gltf.get('animations', []):
+        tracks = clip_tracks(gltf, blob, anim)
+        tmax = max((times[-1] for tr in tracks.values()
+                    for (times, _) in tr.values()), default=0.0)
+        n = max(2, int(round(tmax * 30)) + 1)
+        ankle, wrld, skipped = [], [], 0
+        for side in ('L', 'R'):
+            foot = by_name.get('J_Bip_%s_Foot' % side)
+            toe = by_name.get('J_Bip_%s_ToeBase' % side)
+            knee = by_name.get('J_Bip_%s_LowerLeg' % side)
+            if None in (foot, toe, knee):
+                continue
+            # Trục cục bộ trỏ lên trời, và góc vặn cổ chân, lấy ở tư thế nghỉ
+            # để làm mốc 0 — nên số 0 nghĩa là "đúng như bộ xương gốc".
+            _, r0 = world(foot, parent, {}, rest_r, rest_t, 0.0)
+            a_up = m3_apply(m3_t(r0), UP)
+            pf0, rf0 = world(foot, parent, {}, rest_r, rest_t, 0.0)
+            pt0, _ = world(toe, parent, {}, rest_r, rest_t, 0.0)
+            pk0, _ = world(knee, parent, {}, rest_r, rest_t, 0.0)
+            base, _ = signed_roll(norm(tuple(pt0[i] - pf0[i] for i in range(3))),
+                                  m3_apply(rf0, a_up),
+                                  norm(tuple(pk0[i] - pf0[i] for i in range(3))))
+            base = base or 0.0
+            for k in range(n):
+                t = k / 30.0
+                pf, rf = world(foot, parent, tracks, rest_r, rest_t, t)
+                pt, _ = world(toe, parent, tracks, rest_r, rest_t, t)
+                pk, _ = world(knee, parent, tracks, rest_r, rest_t, t)
+                fwd = norm(tuple(pt[i] - pf[i] for i in range(3)))
+                shin = norm(tuple(pk[i] - pf[i] for i in range(3)))
+                nrm = norm(m3_apply(rf, a_up))
+                aw, _ = signed_roll(fwd, nrm, UP)
+                aa, conf = signed_roll(fwd, nrm, shin)
+                if aw is not None:
+                    wrld.append(abs(aw))
+                if aa is None or conf < MIN_PROJ:
+                    skipped += 1        # mũi chân rướn thẳng hàng cẳng chân
+                    continue
+                ankle.append(abs(aa - base))
+        if not ankle:
+            continue
+        rows.append(dict(
+            name=anim.get('name', '?'),
+            ankle_avg=sum(ankle) / len(ankle), ankle_max=max(ankle),
+            world_avg=sum(wrld) / len(wrld) if wrld else 0.0,
+            world_max=max(wrld) if wrld else 0.0,
+            bad=sum(1 for a in ankle if a > ANKLE_LIMIT + 1.0),
+            total=len(ankle), skipped=skipped))
+    return rows
 
 
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     model = (sys.argv[1] if len(sys.argv) > 1
              else os.path.join(root, 'build', 'female_singer_anime_idol.glb'))
-    gltf, blob = glb.read(model)
-    parent, by_name, rest_r, rest_t = build(gltf, blob)
-
-    UP = [0.0, 1.0, 0.0]
-    print('Tách riêng hai góc của bàn chân:')
-    print('  CHÚC  = mũi chân chúc xuống hay hất lên, quanh trục ngang — bước đi bình thường có')
-    print('  LẬT   = lòng bàn chân quay ngang, quanh trục dọc bàn chân — đây mới là lỗi')
+    rows = measure(model)
+    rows.sort(key=lambda r: -r['ankle_max'])
+    print('CỔ CHÂN là góc bàn chân so với cẳng chân — giới hạn sinh lý %.0f°.'
+          % ANKLE_LIMIT)
+    print('SO THẾ GIỚI chỉ để tham khảo, đại lượng này không bị giới hạn gì.')
     print()
-    print('%-24s %9s %9s   %9s %9s   %s'
-          % ('clip', 'chúc tb', 'chúc max', 'LẬT tb', 'LẬT max', 'khung lật >45°'))
-    rows = []
-    for anim in gltf.get('animations', []):
-        tracks = clip_tracks(gltf, blob, anim)
-        # thời lượng
-        tmax = 0.0
-        for node, tr in tracks.items():
-            for path, (times, _) in tr.items():
-                tmax = max(tmax, times[-1])
-        n_frames = max(2, int(round(tmax * 30)) + 1)
-
-        pitches, rolls = [], []
-        bad = 0
-        total = 0
-        for side in ('L', 'R'):
-            foot = by_name.get('J_Bip_%s_Foot' % side)
-            toe = by_name.get('J_Bip_%s_ToeBase' % side)
-            if foot is None or toe is None:
-                continue
-            r0 = world_rot(foot, {}, parent, {}, rest_r, 0.0)
-            a_up = m3_apply(m3_t(r0), UP)      # trục cục bộ trỏ lên ở tư thế nghỉ
-            for k in range(n_frames):
-                t = k / 30.0
-                pf, rf = world_pos(foot, parent, tracks, rest_r, rest_t, t)
-                pt, _ = world_pos(toe, parent, tracks, rest_r, rest_t, t)
-                fwd = norm([pt[i] - pf[i] for i in range(3)])
-                nrm = norm(m3_apply(rf, a_up))
-                # CHÚC: góc của trục dọc bàn chân so với mặt phẳng sàn.
-                pitches.append(abs(math.degrees(math.asin(max(-1.0, min(1.0, fwd[1]))))))
-                # LẬT: chỉ là phần xoay QUANH trục dọc bàn chân. Phải chiếu cả
-                # pháp tuyến lòng bàn chân lẫn mốc so sánh lên mặt phẳng vuông
-                # góc với trục dọc, rồi mới lấy góc giữa hai hình chiếu. Thiếu
-                # bước chiếu thì độ chúc lọt vào kết quả và tư thế T cũng báo
-                # lật 30° — chính là lỗi ở lần đo trước.
-                rv = [UP[i] - fwd[i] * dot(fwd, UP) for i in range(3)]
-                nv = [nrm[i] - fwd[i] * dot(fwd, nrm) for i in range(3)]
-                if math.sqrt(dot(rv, rv)) < 1e-4 or math.sqrt(dot(nv, nv)) < 1e-4:
-                    continue           # bàn chân dựng thẳng đứng, không định nghĩa được
-                c = max(-1.0, min(1.0, dot(norm(nv), norm(rv))))
-                roll = math.degrees(math.acos(c))
-                rolls.append(roll)
-                total += 1
-                if roll > 45.0:
-                    bad += 1
-        if not rolls:
-            continue
-        rows.append((anim.get('name', '?'),
-                     sum(pitches) / len(pitches), max(pitches),
-                     sum(rolls) / len(rolls), max(rolls), bad, total))
-
-    rows.sort(key=lambda r: -r[4])
-    for name, pa, pm, ra, rm, bad, tot in rows:
-        flag = ''
-        if rm > 90:
-            flag = '  ← LẬT NGỬA'
-        elif rm > 45:
-            flag = '  ← lật nhiều'
-        print('%-24s %8.0f° %8.0f°   %8.0f° %8.0f°   %3d/%-4d%s'
-              % (name, pa, pm, ra, rm, bad, tot, flag))
+    print('%-24s %18s %18s %14s %s'
+          % ('clip', 'CỔ CHÂN tb/max', 'so t.giới tb/max', 'quá giới hạn',
+             'bỏ (rướn mũi)'))
+    for r in rows:
+        flag = '  ← VẶN' if r['ankle_max'] > ANKLE_LIMIT + 1.0 else ''
+        print('%-24s %8.0f° %8.0f° %8.0f° %8.0f° %8d/%-5d %8d%s'
+              % (r['name'], r['ankle_avg'], r['ankle_max'],
+                 r['world_avg'], r['world_max'], r['bad'], r['total'],
+                 r['skipped'], flag))
 
 
 if __name__ == '__main__':
