@@ -8,4 +8,8 @@ import retarget
 
 CLIP = '18_DanChuyen_Mocap'
 bake = retarget.mocap_state(CLIP, 'dataset-1_guide_happy_001.bvh',
-                            offset=10, loop_lo=20, loop_hi=80, blend=6)
+                            # Cử chỉ dẫn chuyện không tuần hoàn, nên điểm CẮT
+                            # mới quyết định chứ không phải độ dài: quét cả hai
+                            # chiều và chấm theo mối nối so với bước thường.
+                            offset=10, loop_lo=30, loop_hi=110,
+                            seamless=True, blend=6)

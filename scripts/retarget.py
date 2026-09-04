@@ -487,6 +487,56 @@ def find_loop_length(bvh_arm, first, lo=16, hi=90):
     return best
 
 
+def find_seamless_loop(bvh_arm, first, last, lo=20, hi=80, window=600,
+                       stride=2, length_bonus=0.15):
+    """Quét CẢ điểm bắt đầu lẫn độ dài, chọn vòng lặp có mối nối êm nhất.
+
+    find_loop_length chỉ dò độ dài từ một điểm bắt đầu cố định. Với đoạn ghi
+    không tuần hoàn — cử chỉ dẫn chuyện, nói năng — thì chính điểm bắt đầu mới
+    quyết định, và cắt sai chỗ thì hoà bao nhiêu cũng còn giật.
+
+    Chấm điểm bằng TỈ SỐ giữa sai lệch ở mối nối và mức đổi bình thường giữa
+    hai khung của chính đoạn đó, chứ không bằng sai lệch tuyệt đối: đoạn nào
+    chuyển động nhanh thì sai lệch nào cũng lớn, so tuyệt đối là luôn chọn đúng
+    những đoạn đứng im. Cộng thêm một chút ưu ái cho vòng dài, vì vòng ngắn lặp
+    lại nhiều lần trong một bài nghe rất máy.
+
+    Trả về (frame bắt đầu, số frame).
+    """
+    scene = bpy.context.scene
+    end = min(last - 1, first + window)
+    frames = list(range(first, end))
+    if len(frames) < lo + 4:
+        return first, lo
+    dirs = []
+    for f in frames:
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        dirs.append([_joint_dir(bvh_arm, sb, sc) or Vector((0, 0, 1))
+                     for sb, sc, _d, _dc in BONE_MAP])
+
+    def gap(i, j):
+        return sum(a.angle(b, 0.0) for a, b in zip(dirs[i], dirs[j]))
+
+    steps = sorted(gap(i, i + 1) for i in range(len(dirs) - 1))
+    typical = max(1e-3, steps[len(steps) // 2])
+
+    best = None
+    n_max = min(hi, len(dirs) - 2)
+    for s0 in range(0, len(dirs) - lo - 1, stride):
+        for n in range(lo, n_max + 1):
+            if s0 + n >= len(dirs):
+                break
+            score = gap(s0, s0 + n) / typical - length_bonus * (n / n_max)
+            if best is None or score < best[0]:
+                best = (score, s0, n)
+    _sc, s0, n = best
+    print(f'    vòng lặp êm nhất: bắt đầu +{s0} frame, dài {n} frame '
+          f'(mối nối {math.degrees(gap(s0, s0 + n)):.0f}° so với bước thường '
+          f'{math.degrees(typical):.0f}°)')
+    return first + s0, n
+
+
 def find_dance_loop(bvh_arm, first, last, window=720, lag_lo=30, lag_hi=220, step=2):
     """Tìm chu kỳ của một đoạn vũ đạo dài, rồi chọn chỗ bắt đầu khép nhất.
 
@@ -782,7 +832,7 @@ def close_loop(char_arm, act, n_frames, blend=6):
 
 
 def mocap_state(clip_name, bvh_file, offset=0, loop_lo=20, loop_hi=90,
-                in_place=True, blend=0, dance=False,
+                in_place=True, blend=0, dance=False, seamless=False,
                 foot=None):
     """Trả về hàm bake cho một trạng thái lấy chuyển động từ file BVH.
 
@@ -798,7 +848,10 @@ def mocap_state(clip_name, bvh_file, offset=0, loop_lo=20, loop_hi=90,
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         bvh_arm, first, last = load_bvh(os.path.join(root, 'mocap', bvh_file))
         try:
-            if dance:
+            if seamless:
+                start, span = find_seamless_loop(bvh_arm, first + offset, last,
+                                                 lo=loop_lo, hi=loop_hi)
+            elif dance:
                 start, span = find_dance_loop(bvh_arm, first + offset, last,
                                               lag_lo=loop_lo, lag_hi=loop_hi)
             else:
