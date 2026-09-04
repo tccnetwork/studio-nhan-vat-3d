@@ -281,7 +281,7 @@ def _body_forward(char_arm, sign):
 
 
 def level_feet(char_arm, act, frames, max_ankle_deg=30.0, max_yaw_deg=35.0,
-               min_flat=0.35):
+               min_flat=0.35, ankle_scale=1.0, yaw_scale=1.0):
     """Gỡ phần vặn cổ chân vượt quá giới hạn sinh lý.
 
     Vì sao cần: _aim() xoay một xương bằng phép quay cung ngắn nhất tới hướng
@@ -315,6 +315,13 @@ def level_feet(char_arm, act, frames, max_ankle_deg=30.0, max_yaw_deg=35.0,
     đổi hướng mũi chân, không đổi độ chúc. Bỏ qua những khung bàn chân dựng gần
     thẳng đứng (min_flat): ở đó hướng mũi chân vừa không xác định rõ vừa không
     nhìn ra được.
+
+    ankle_scale, yaw_scale: THU NHỎ biên độ trước khi kẹp. Kẹp không thôi thì
+    tín hiệu dính lì ở trần — đo được trên clip đi mocap: cổ chân nằm đúng 30°
+    suốt tám khung liền, mũi chân nằm đúng -35°. Nhân nhỏ lại thì giữ nguyên
+    nhịp và hình dáng của chuyển động thật, chỉ hạ biên xuống. Hai clip đi bộ
+    dựng bằng tay của dự án — thứ người dùng lấy làm chuẩn — có cổ chân đúng 0°
+    và mũi chân 0..2° suốt chu kỳ.
     """
     if not LEVEL_FEET:
         print('    san vặn cổ chân: BỎ QUA (NO_LEVEL_FEET=1)')
@@ -382,11 +389,12 @@ def level_feet(char_arm, act, frames, max_ankle_deg=30.0, max_yaw_deg=35.0,
             if body.cross(fwd).z < 0:
                 yaw = -yaw
             yaw_before = max(yaw_before, abs(yaw))
-            excess = 0.0
-            if yaw > yaw_limit:
-                excess = yaw - yaw_limit
-            elif yaw < -yaw_limit:
-                excess = yaw + yaw_limit
+            want = yaw * yaw_scale
+            if want > yaw_limit:
+                want = yaw_limit
+            elif want < -yaw_limit:
+                want = -yaw_limit
+            excess = yaw - want
             if abs(excess) < math.radians(0.5):
                 yaw_after = max(yaw_after, abs(yaw))
                 continue
@@ -423,11 +431,12 @@ def level_feet(char_arm, act, frames, max_ankle_deg=30.0, max_yaw_deg=35.0,
                 continue
             roll -= base                    # 0 nghĩa là đúng như tư thế nghỉ
             worst_before = max(worst_before, abs(roll))
-            excess = 0.0
-            if roll > limit:
-                excess = roll - limit
-            elif roll < -limit:
-                excess = roll + limit
+            want = roll * ankle_scale
+            if want > limit:
+                want = limit
+            elif want < -limit:
+                want = -limit
+            excess = roll - want
             if abs(excess) < math.radians(0.5):
                 worst_after = max(worst_after, abs(roll))
                 continue
@@ -558,7 +567,7 @@ def find_dance_loop(bvh_arm, first, last, window=720, lag_lo=30, lag_hi=220, ste
 
 
 def retarget(char_arm, bvh_arm, clip_name, frames=None,
-             in_place=True, ground=True, scale=None, lock=True):
+             in_place=True, ground=True, scale=None, lock=True, foot=None):
     """Bake một action mới trên char_arm từ chuyển động của bvh_arm.
 
     in_place : bỏ thành phần tịnh tiến theo hướng đi để clip lặp được tại chỗ;
@@ -664,7 +673,7 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
 
     if ground and lock:
         lock_feet(char_arm, act, (1, out_frame))
-        level_feet(char_arm, act, (1, out_frame))
+        level_feet(char_arm, act, (1, out_frame), **(foot or {}))
 
     print(f'    đã bake {out_frame} frame vào "{clip_name}"')
     return act
@@ -703,12 +712,18 @@ def close_loop(char_arm, act, n_frames, blend=6):
 
 
 def mocap_state(clip_name, bvh_file, offset=0, loop_lo=20, loop_hi=90,
-                in_place=True, blend=0, dance=False):
+                in_place=True, blend=0, dance=False,
+                foot=None):
     """Trả về hàm bake cho một trạng thái lấy chuyển động từ file BVH.
 
     offset : bỏ qua bấy nhiêu frame đầu. Các bản ghi dài thường mở đầu bằng
              đoạn diễn viên đứng chờ, lấy đúng đoạn đó thì clip không có gì.
+    foot   : tham số truyền thẳng cho level_feet, ví dụ
+             dict(ankle_scale=0.25, yaw_scale=0.15, max_ankle_deg=8,
+                  max_yaw_deg=8) cho clip đi bộ, nơi người xem so ngay với
+             dáng đi tự nhiên nên bàn chân phải rất gọn.
     """
+    foot = dict(foot or {})
     def bake(char_arm, pb):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         bvh_arm, first, last = load_bvh(os.path.join(root, 'mocap', bvh_file))
@@ -725,11 +740,12 @@ def mocap_state(clip_name, bvh_file, offset=0, loop_lo=20, loop_hi=90,
             # mấy frame vừa được chỉnh cho chạm sàn.
             act = retarget(char_arm, bvh_arm, clip_name,
                            frames=(start, start + span - 1),
-                           in_place=in_place, ground=True, lock=not blend)
+                           in_place=in_place, ground=True, lock=not blend,
+                           foot=foot)
             if blend:
                 close_loop(char_arm, act, span, blend=blend)
                 lock_feet(char_arm, act, (1, span))
-                level_feet(char_arm, act, (1, span))
+                level_feet(char_arm, act, (1, span), **foot)
         finally:
             discard_bvh(bvh_arm)
             bpy.context.view_layer.objects.active = char_arm
