@@ -24,6 +24,7 @@ Nên phép biến đổi chỉ còn một hệ số tỉ lệ, không có phép 
 import bpy
 import math
 import os
+import re
 from mathutils import Quaternion, Vector
 
 # Hướng của một xương phải đo bằng vector từ khớp này tới **khớp con**, không
@@ -686,19 +687,74 @@ def close_loop(char_arm, act, n_frames, blend=6):
     cắt gọn. Nhưng vũ đạo hay cử chỉ dẫn chuyện thì không tuần hoàn, cắt ở đâu
     cũng còn một cú giật ở chỗ nối. Ở đây mấy frame cuối được slerp dần về tư
     thế của frame đầu, đổi lấy một chút biến dạng ở đuôi để hết giật.
+
+    Hoà CẢ VỊ TRÍ HÔNG chứ không chỉ góc xoay. Bản cũ bỏ sót chỗ này và đo được
+    hậu quả: clip dẫn chuyện lệch 110 mm theo trục dọc ở mối nối, tức cả người
+    nảy lên 11 cm mỗi vòng lặp — thấy rõ hơn hẳn mọi sai lệch góc.
+
+    Trọng số chạy tới đúng 1 ở khung cuối. Bản cũ dừng ở blend/(blend+1), tức
+    với blend=6 thì còn giữ lại một phần bảy sai lệch ban đầu.
     """
     scene = bpy.context.scene
-    bones = [char_arm.pose.bones[d] for _s, _sc, d, _dc in BONE_MAP
-             if d in char_arm.pose.bones]
+    # Lấy xương từ chính các đường cong của action, KHÔNG lấy từ BONE_MAP.
+    # BONE_MAP thiếu UpperChest, Head, vai và bàn tay, nên bản cũ để nguyên sai
+    # lệch ở những xương ấy: đo được clip vũ đạo dài còn giật 5,8 lần mức bình
+    # thường dù đã khép vòng, và phần lớn sai lệch nằm ở đầu và ngực trên.
+    names = set()
+    for fc in act.fcurves:
+        m = re.match(r'pose\.bones\["([^"]+)"\]\.rotation_quaternion', fc.data_path)
+        if m:
+            names.add(m.group(1))
+    bones = [char_arm.pose.bones[n] for n in sorted(names)
+             if n in char_arm.pose.bones]
+    hips = char_arm.pose.bones.get('J_Bip_C_Hips')
+    def _seam(last):
+        scene.frame_set(1); bpy.context.view_layer.update()
+        a = {pb.name: pb.matrix.to_quaternion() for pb in bones}
+        scene.frame_set(last); bpy.context.view_layer.update()
+        tot = 0.0
+        for pb in bones:
+            q = pb.matrix.to_quaternion()
+            tot += math.degrees(2 * math.acos(min(1.0, abs(q.dot(a[pb.name])))))
+        return tot
+
+    def _typical_step():
+        """Mức đổi tư thế bình thường giữa hai khung, lấy trung vị."""
+        steps = []
+        prev = None
+        for f in range(1, n_frames + 1, max(1, n_frames // 24)):
+            scene.frame_set(f)
+            bpy.context.view_layer.update()
+            cur = {pb.name: pb.matrix.to_quaternion() for pb in bones}
+            if prev is not None:
+                tot = 0.0
+                for pb in bones:
+                    d = abs(cur[pb.name].dot(prev[pb.name]))
+                    tot += math.degrees(2 * math.acos(min(1.0, d)))
+                steps.append(tot / max(1, n_frames // 24))
+            prev = cur
+        steps.sort()
+        return steps[len(steps) // 2] if steps else 1.0
+
+    gap = _seam(n_frames)
+    step = max(0.5, _typical_step())
+    # Cửa sổ hoà phải đủ dài để phần sửa mỗi khung KHÔNG lớn hơn chuyển động
+    # bình thường của chính clip đó. Đặt cứng 6 khung là sai: đo được clip vũ
+    # đạo dài lệch 314,7° ở mối nối, hoà trên 6 khung chỉ còn 51,7° — vẫn gấp
+    # nhiều lần một bước bình thường, và người xem thấy đúng một cú giật mỗi
+    # vòng. Cần khoảng gap/step khung; trần là một phần ba clip.
+    want = int(math.ceil(gap / (0.6 * step)))
+    blend = max(1, min(max(blend, want), n_frames // 3))
+    print(f'    khép vòng: {len(bones)} xương, lệch mối nối {gap:.0f}°, '
+          f'bước thường {step:.1f}° -> hoà trên {blend} khung')
 
     scene.frame_set(1)
     bpy.context.view_layer.update()
     head_pose = {pb.name: pb.rotation_quaternion.copy() for pb in bones}
-
-    blend = min(blend, n_frames // 3)
+    head_loc = hips.location.copy() if hips else None
     for i in range(blend):
         f = n_frames - blend + 1 + i
-        w = (i + 1) / (blend + 1)
+        w = (i + 1) / blend
         scene.frame_set(f)
         bpy.context.view_layer.update()
         for pb in bones:
@@ -708,7 +764,21 @@ def close_loop(char_arm, act, n_frames, blend=6):
                 tgt.negate()               # tránh đi vòng xa trên mặt cầu
             pb.rotation_quaternion = cur.slerp(tgt, w)
             pb.keyframe_insert(data_path='rotation_quaternion', frame=f)
-    print(f'    làm khép vòng: hoà {blend} frame cuối về tư thế frame đầu')
+        if hips and head_loc is not None:
+            hips.location = hips.location.lerp(head_loc, w)
+            hips.keyframe_insert(data_path='location', frame=f)
+
+    # Khung cuối giờ TRÙNG KHÍT khung đầu, nên phải bỏ nó đi. Giữ lại thì mỗi
+    # vòng lặp nhân vật đứng hình thêm một khung — vẫn là giật, chỉ nhỏ hơn.
+    # Bỏ rồi thì bước từ khung áp chót về khung đầu đúng bằng bước bình thường,
+    # vì phép hoà ở trên vốn nhắm cho khung cuối rơi trúng tư thế khung đầu.
+    for fc in act.fcurves:
+        doomed = [kp for kp in fc.keyframe_points
+                  if abs(kp.co[0] - n_frames) < 0.5]
+        for kp in doomed:
+            fc.keyframe_points.remove(kp)
+        fc.update()
+    print(f'      còn lệch {_seam(n_frames - 1):.0f}° — so với bước thường {step:.0f}°')
 
 
 def mocap_state(clip_name, bvh_file, offset=0, loop_lo=20, loop_hi=90,
@@ -735,17 +805,19 @@ def mocap_state(clip_name, bvh_file, offset=0, loop_lo=20, loop_hi=90,
                 start = min(first + offset, last - loop_lo - 1)
                 hi = min(loop_hi, last - start - 1)
                 span = find_loop_length(bvh_arm, start, lo=loop_lo, hi=hi)
-            # Thứ tự quan trọng: làm khép vòng trước rồi mới khoá bàn chân.
-            # Làm ngược lại thì phép hoà đuôi clip sẽ nhấc chân khỏi sàn ở đúng
-            # mấy frame vừa được chỉnh cho chạm sàn.
+            # Khép vòng phải chạy SAU CÙNG. Trước đây nó chạy trước khoá bàn
+            # chân, và hai bước sau ghi đè khoá lên đúng mấy khung ở đuôi nên
+            # mở lại mối nối vừa hoà xong: đo được chân còn lệch 18–24° ở chỗ
+            # nối dù đã gọi close_loop. Đổi lại, mấy khung cuối có thể hở chân
+            # khỏi sàn một chút — đánh đổi đáng giá so với cú giật mỗi vòng.
             act = retarget(char_arm, bvh_arm, clip_name,
                            frames=(start, start + span - 1),
                            in_place=in_place, ground=True, lock=not blend,
                            foot=foot)
             if blend:
-                close_loop(char_arm, act, span, blend=blend)
                 lock_feet(char_arm, act, (1, span))
                 level_feet(char_arm, act, (1, span), **foot)
+                close_loop(char_arm, act, span, blend=blend)
         finally:
             discard_bvh(bvh_arm)
             bpy.context.view_layer.objects.active = char_arm

@@ -270,6 +270,13 @@ def build_character(wanted_states=None, fast=False):
     partial = bool(wanted_states)
     print(">>> Nạp model nguồn" + (f" — chỉ dựng: {', '.join(wanted_states)}" if partial else ""))
     clean_scene()
+    # Nhịp khung phải đặt SAU clean_scene: hàm đó nạp lại thiết lập gốc và
+    # xoá luôn mọi thứ đặt trước nó. Blender mặc định 24, mà cả năm file mocap
+    # đều ghi ở 30 và các clip viết tay cũng dựng theo quy ước "60 khung = 2
+    # giây". Để nguyên 24 thì mọi clip chạy chậm hơn 25% so với thứ đã dựng ra
+    # chúng, và manifest khai fps 30 trở thành lời khai sai.
+    bpy.context.scene.render.fps = manifest.FPS
+    bpy.context.scene.render.fps_base = 1.0
     
     # source/ chỉ đọc, build/ chỉ ghi. Trước Giai đoạn 0 hai đường dẫn này
     # trỏ vào cùng một file, nên mỗi lần chạy lại là một lần chồng thêm bản

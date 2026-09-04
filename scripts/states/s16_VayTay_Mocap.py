@@ -8,4 +8,4 @@ import retarget
 
 CLIP = '16_VayTay_Mocap'
 bake = retarget.mocap_state(CLIP, 'dataset-1_byebye_happy_001.bvh',
-                            offset=40, loop_lo=24, loop_hi=90)
+                            offset=40, loop_lo=24, loop_hi=90, blend=6)
