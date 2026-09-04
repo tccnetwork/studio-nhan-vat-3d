@@ -16,6 +16,24 @@ const VOWEL_MAP = {
     a: 'A', e: 'E', i: 'I', o: 'O', u: 'U', y: 'I',
 };
 
+// Phụ âm phát ra bằng MÔI. Muốn kêu được /m/, /b/, /p/ thì hai môi phải chạm
+// hẳn vào nhau, còn /ph/, /v/ thì môi dưới chạm răng trên — đóng một nửa.
+// Đây là chỗ hụt lớn nhất của bản cũ: miệng chưa bao giờ khép giữa câu, mà
+// tiếng Việt thì đầy âm tiết đóng bằng môi ("em", "đẹp", "mưa", "bên").
+const ONSET_FULL = /^(m|b|p)/;         // mím hẳn trước khi bật ra
+const ONSET_HALF = /^(ph|v)/;          // môi dưới chạm răng
+const CODA_FULL = /(m|p)$/;            // âm tiết đóng lại bằng môi
+
+/** Một âm tiết cần mím môi ở đầu và ở cuối bao nhiêu (0..1). */
+export function syllableLips(word) {
+    const plain = stripMarks(word).replace(/[^a-z]/g, '');
+    if (!plain) return { closeIn: 0, closeOut: 0 };
+    return {
+        closeIn: ONSET_HALF.test(plain) ? 0.55 : (ONSET_FULL.test(plain) ? 1 : 0),
+        closeOut: CODA_FULL.test(plain) ? 1 : 0,
+    };
+}
+
 /** Bỏ dấu tiếng Việt để còn lại chữ cái gốc. */
 function stripMarks(word) {
     return word.normalize('NFD')
@@ -48,7 +66,7 @@ export function parseLyrics(text) {
             text: line,
             syllables: line.split(/[\s,.;:!?—–-]+/)
                 .filter(Boolean)
-                .map(w => ({ word: w, vowels: syllableVowels(w) })),
+                .map(w => ({ word: w, vowels: syllableVowels(w), ...syllableLips(w) })),
         }))
         .filter(l => l.syllables.length > 0);
 }
@@ -60,6 +78,8 @@ export class LyricsDriver {
         lineBreak = 0.9,       // giây im tiếng thì coi là hết câu
         floorRise = 2.2,       // tốc độ nền bò lên, mỗi giây
         maxHold = 0.55,        // giữ một khẩu hình lâu hơn thế thì tự sang chữ kế
+        closeOutAt = 0.55,     // qua bấy nhiêu phần âm tiết thì bắt đầu khép cuối
+        closeInAt = 0.78,      // qua bấy nhiêu phần thì mím sẵn cho chữ kế
     } = {}) {
         this.lines = parseLyrics(text);
         this.onsetRise = onsetRise;
@@ -67,6 +87,10 @@ export class LyricsDriver {
         this.lineBreak = lineBreak;
         this.floorRise = floorRise;
         this.maxHold = maxHold;
+        this.closeOutAt = closeOutAt;
+        this.closeInAt = closeInAt;
+        this.close = 0;        // mức mím môi cần có ngay lúc này, 0..1
+        this.period = 0.3;     // khoảng cách trung bình giữa hai âm tiết, giây
         this.line = 0;
         this.syl = -1;
         this.vowel = null;
@@ -86,6 +110,41 @@ export class LyricsDriver {
 
     get totalSyllables() {
         return this.lines.reduce((n, l) => n + l.syllables.length, 0);
+    }
+
+    /** Âm tiết kế tiếp trong câu, để mím môi SẴN trước khi nó bật ra.
+     *  Phải mím trước: cú bật /m/, /b/, /p/ chỉ kêu được khi hai môi đang chạm
+     *  nhau, mà bộ dò khởi âm lại bắt đúng vào lúc nó đã bật rồi. */
+    _next() {
+        const line = this.lines[this.line];
+        if (!line) return null;
+        if (this.syl + 1 < line.syllables.length) return line.syllables[this.syl + 1];
+        const nl = this.lines[(this.line + 1) % this.lines.length];
+        return nl && nl.syllables.length ? nl.syllables[0] : null;
+    }
+
+    /** Mức mím môi cần có ở thời điểm hiện tại. */
+    _lipClose() {
+        if (this.quiet > 0.35) return 0.55;      // nghỉ giữa câu: môi khép hờ
+        const line = this.lines[this.line];
+        if (!line || this.syl < 0) return 0;
+        const cur = line.syllables[this.syl];
+        if (!cur) return 0;
+        const p = Math.max(0.12, Math.min(0.9, this.period));
+        const phase = this.since / p;
+        let close = 0;
+        // Nửa sau của âm tiết: khép lại nếu âm tiết kết thúc bằng môi.
+        if (cur.closeOut && phase > this.closeOutAt) {
+            close = cur.closeOut
+                * Math.min(1, (phase - this.closeOutAt) / (1 - this.closeOutAt));
+        }
+        // Sát chữ kế: mím sẵn nếu chữ ấy mở đầu bằng môi.
+        const nx = this._next();
+        if (nx && nx.closeIn && phase > this.closeInAt) {
+            close = Math.max(close, nx.closeIn
+                * Math.min(1, (phase - this.closeInAt) / (1 - this.closeInAt)));
+        }
+        return Math.min(1, close);
     }
 
     /** level: mức to của giọng, 0..1. Trả về nguyên âm đang cần mở, hoặc null. */
@@ -112,6 +171,9 @@ export class LyricsDriver {
         const stuck = this.since > this.maxHold && level > 0.25;
 
         if ((rise > this.onsetRise || stuck) && this.since > this.minGap && this.lines.length) {
+            // Nhịp âm tiết đo từ chính khoảng cách vừa qua, bám mềm để một cú
+            // bắt hụt không kéo lệch cả câu.
+            if (this.since < 1.2) this.period += (this.since - this.period) * 0.35;
             this.since = 0;
             this._floor = level;
             const line = this.lines[this.line];
@@ -131,11 +193,13 @@ export class LyricsDriver {
             }
         }
         if (this.quiet > 0.25) this.vowel = null;
+        this.close = this._lipClose();
         return this.vowel;
     }
 
     reset() {
         this.line = 0; this.syl = -1; this.vowel = null;
         this.since = 99; this.quiet = 0; this._floor = 0; this._sub = 0;
+        this.close = 0; this.period = 0.3;
     }
 }

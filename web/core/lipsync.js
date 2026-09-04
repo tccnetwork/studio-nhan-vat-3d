@@ -120,19 +120,32 @@ export function classifyVowel(db, sampleRate) {
  *  Không dùng ngưỡng dB tuyệt đối: giá trị getFloatFrequencyData phụ thuộc mức
  *  thu và cách phối của từng bản, nên một con số cứng chỉ đúng với đúng một file.
  */
-export function createLoudnessGate({ adapt = 0.4, minRange = 8 } = {}) {
+export function createLoudnessGate({
+    snap = 12.0,        // tốc độ bám theo hướng "mở rộng", mỗi giây
+    floorUp = 0.85,     // nền bò lên, hằng số thời gian ~1,2 giây
+    ceilDown = 0.40,    // trần tụt xuống, hằng số thời gian ~2,5 giây
+    minRange = 8,       // dB, khoảng động nhỏ nhất còn coi là có nghĩa
+} = {}) {
     let floor = null, ceil = null;
     return {
         reset() { floor = null; ceil = null; },
-        /** Trả về 0..1: 0 là im tiếng, 1 là to bằng đoạn to nhất gần đây. */
+        /** Trả về 0..1: 0 là im tiếng, 1 là to bằng đoạn to nhất gần đây.
+         *
+         *  Nền phải hồi lên trong khoảng một giây. Bản cũ cho nền bò lên với
+         *  hằng số thời gian 125 giây và trần tụt trong 50 giây, nên sau vài
+         *  giây đầu bài, nền dính luôn ở chỗ im nhất từng gặp và mọi thứ sau
+         *  đó nằm sát trần. Đo trên bài thật: p10 0,85 · p50 0,92 · p90 0,98,
+         *  tức là cổng gần như trả về hằng số 1. Hệ quả: khẩu hình lúc nào
+         *  cũng mở hết cỡ, "miệng nhỏ" không bao giờ bật, và câu hát to hay
+         *  nhỏ đều ra một hình miệng.
+         */
         level(db, sampleRate, delta) {
             const lv = bandEnergyDb(db, sampleRate);
             if (!isFinite(lv)) return 0;
             if (floor === null) { floor = lv; ceil = lv + minRange; }
-            const k = Math.min(1, adapt * delta);
-            // Nền tụt nhanh, lên chậm; trần thì ngược lại.
-            floor += (lv < floor ? 0.5 : k * 0.02) * (lv - floor);
-            ceil += (lv > ceil ? 0.5 : k * 0.05) * (lv - ceil);
+            const fast = Math.min(1, snap * delta);
+            floor += (lv < floor ? fast : Math.min(1, floorUp * delta)) * (lv - floor);
+            ceil += (lv > ceil ? fast : Math.min(1, ceilDown * delta)) * (lv - ceil);
             const range = Math.max(minRange, ceil - floor);
             return Math.min(1, Math.max(0, (lv - floor) / range));
         },

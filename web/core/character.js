@@ -14,6 +14,12 @@ import { Choreographer } from './choreo.js';
 const STATE_FADE = 0.25;
 const VISEME_ATTACK = 14.0;   // tốc độ mở khẩu hình
 const VISEME_RELEASE = 7.0;   // tốc độ đóng lại, chậm hơn cho đỡ giật
+// Môi mím nhanh hơn hẳn khẩu hình nguyên âm: cú bật /m/, /b/, /p/ là một động
+// tác dứt khoát, mím chậm thì mất luôn cảm giác có phụ âm.
+const CLOSE_ATTACK = 26.0;
+const CLOSE_RELEASE = 16.0;
+const SIZE_RATE = 9.0;        // độ mở to/nhỏ theo mức to, đổi từ tốn
+const REST_CLOSE = 0.45;      // môi khép hờ khi không có tiếng hát
 const VOICE_ONSET = 0.25;     // dưới mức này coi như đang giữa hai câu hát
 const GESTURE_FADE = 0.35;    // giây hoà cho lớp tay đắp thêm
 const GESTURE_WEIGHT = 0.85;  // đắp gần hết, chừa lại chút nền cho tay còn nhịp
@@ -44,6 +50,7 @@ export class Character {
         this.hair = new HairPhysics();
         this.gate = createLoudnessGate();
         this.visemes = { A: 0, I: 0, U: 0, E: 0, O: 0 };
+        this.mouth = { Close: 0, Small: 0, Large: 0 };
         this.beat = new BeatTracker();
         this.beatSync = true;        // cho điệu nhảy chạy theo nhịp bài hát
         this._syncedFor = null;
@@ -94,8 +101,14 @@ export class Character {
             // cũng chứa "MTH_A", và trước đây nó chỉ thua vì tình cờ đứng trước
             // Fcl_MTH_A trong danh sách. Đổi thứ tự một cái là miệng chữ A biến
             // thành miệng giận dữ.
+            // Ngoài năm nguyên âm còn ba khẩu hình nữa mà bản cũ bỏ phí:
+            // Close để mím môi ở phụ âm /m/, /b/, /p/ — thiếu nó thì miệng
+            // không bao giờ khép giữa câu; Small và Large để miệng mở to nhỏ
+            // theo mức hát chứ không phải lúc nào cũng một cỡ.
             const WANT = { Fcl_MTH_A: 'A', Fcl_MTH_I: 'I', Fcl_MTH_U: 'U',
-                           Fcl_MTH_E: 'E', Fcl_MTH_O: 'O' };
+                           Fcl_MTH_E: 'E', Fcl_MTH_O: 'O',
+                           Fcl_MTH_Close: 'Close', Fcl_MTH_Small: 'Small',
+                           Fcl_MTH_Large: 'Large' };
             for (const key in dict) {
                 const slot = WANT[key.split('.').pop()];
                 if (slot) this.morphIndices[slot] = dict[key];
@@ -297,9 +310,11 @@ export class Character {
 
     _updateVisemes(delta, audio) {
         let guess = null;
+        let closeTarget = 0;
+        const voiced = !!(audio && audio.vocals && audio.spectrumDb);
         // Chỉ nhép khi bản đang phát thực sự có giọng hát — điều này được khai
         // báo chứ không đoán từ tín hiệu; xem chú thích trong scripts/catalog.py.
-        if (audio && audio.vocals && audio.spectrumDb) {
+        if (voiced) {
             // Đã đo ở update(); cổng lọc có trạng thái nên gọi lần nữa sẽ khiến
             // nó thích nghi nhanh gấp đôi.
             const loud = this._loud;
@@ -308,26 +323,67 @@ export class Character {
                 // Chính xác hơn hẳn đoán formant trên bản phối đã trộn nhạc cụ.
                 const key = this.lyrics.push(loud, delta);
                 if (key) guess = { key, openness: Math.min(1, Math.max(0.25, loud)) };
+                // Lời còn cho biết cả phụ âm, thứ mà formant không bao giờ nói
+                // được: âm tiết mở đầu hay kết thúc bằng /m/, /b/, /p/ thì hai
+                // môi phải chạm hẳn vào nhau.
+                closeTarget = this.lyrics.close;
             } else if (loud > VOICE_ONSET) {
                 guess = classifyVowel(audio.spectrumDb, audio.sampleRate);
-                // Có sàn 0,45: khẩu hình mở he hé thì người xem không nhận ra
-                // là đang hát. Đã có cổng lọc mức to chặn đoạn không có giọng
-                // nên mở rõ ở đây là an toàn.
-                if (guess) guess.openness = Math.min(1, 0.45 + (loud - VOICE_ONSET) / 0.45);
+                if (guess) {
+                    // Có sàn 0,45: khẩu hình mở he hé thì người xem không nhận
+                    // ra là đang hát. Đã có cổng lọc mức to chặn đoạn không có
+                    // giọng nên mở rõ ở đây là an toàn.
+                    guess.openness = Math.min(1, 0.45 + (loud - VOICE_ONSET) / 0.45);
+                }
             }
-        } else if (this.lyrics) {
-            this.lyrics.push(0, delta);
+            if (!guess && !this.lyrics) closeTarget = REST_CLOSE;
+        } else {
+            if (this.lyrics) this.lyrics.push(0, delta);
+            closeTarget = REST_CLOSE;
         }
+
         for (const key in this.visemes) {
             const target = guess && guess.key === key ? guess.openness : 0;
             const rate = target > this.visemes[key] ? VISEME_ATTACK : VISEME_RELEASE;
             this.visemes[key] += (target - this.visemes[key]) * Math.min(1, rate * delta);
         }
+
+        // Độ mở theo mức hát: câu hát nhỏ thì miệng nhỏ lại, lên cao trào thì
+        // mở to. Bản cũ chỉ có một cỡ miệng duy nhất cho mọi câu.
+        const loudNow = voiced ? this._loud : 0;
+        // Ngưỡng lấy từ phân bố mức to đo trên bốn bài có lời, dựng lại phổ
+        // đúng 60 Hz từ mp3: p25 = 0,08 · p50 = 0,39 · p75 = 0,74. Đặt "miệng
+        // to" từ 0,68 nên nó chỉ bật ở khoảng một phần tư thời gian to nhất,
+        // còn "miệng nhỏ" tắt hẳn trên 0,45. Đoán ngưỡng theo cảm tính thì
+        // trước đó "miệng nhỏ" không bao giờ bật một lần nào.
+        const sizeT = {
+            Close: closeTarget,
+            Small: guess ? Math.max(0, (0.45 - loudNow) / 0.20) * 0.35 : 0,
+            Large: guess ? Math.max(0, (loudNow - 0.68) / 0.32) * 0.45 : 0,
+        };
+        for (const key in this.mouth) {
+            const t = sizeT[key];
+            let rate = SIZE_RATE;
+            if (key === 'Close') rate = t > this.mouth[key] ? CLOSE_ATTACK : CLOSE_RELEASE;
+            this.mouth[key] += (t - this.mouth[key]) * Math.min(1, rate * delta);
+        }
+
+        // Môi đang chạm nhau thì không thể đồng thời há ra hình nguyên âm.
+        const open = 1 - 0.88 * this.mouth.Close;
+        for (const mesh of this.morphMeshes) {
+            if (!mesh.morphTargetInfluences) continue;
+            for (const key in this.mouth) {
+                const idx = this.morphIndices[key];
+                if (idx !== undefined) mesh.morphTargetInfluences[idx] = this.mouth[key];
+            }
+        }
         for (const mesh of this.morphMeshes) {
             if (!mesh.morphTargetInfluences) continue;
             for (const key in this.visemes) {
                 const idx = this.morphIndices[key];
-                if (idx !== undefined) mesh.morphTargetInfluences[idx] = this.visemes[key];
+                if (idx !== undefined) {
+                    mesh.morphTargetInfluences[idx] = this.visemes[key] * open;
+                }
             }
         }
     }
