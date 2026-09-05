@@ -1,8 +1,24 @@
-# Studio Ca Sĩ 3D
+# Studio Nhân Vật 3D
 
-Nhân vật nữ ca sĩ anime idol dựng trên nền VRoid Studio, kèm 19 trạng thái
-hoạt ảnh (5 trong đó retarget từ mocap thật), 57 blendshape khuôn mặt, một
-trình xem chạy thẳng trên trình duyệt và một bản nhúng được vào trang khác.
+Quy trình dựng nhân vật 3D cho web, chạy hoàn toàn bằng Blender headless và
+three.js. Không có bước nào phải mở giao diện Blender: mọi thứ là script, dựng
+lại lúc nào cũng ra đúng kết quả cũ.
+
+Trong repo có **ba nhân vật**, mỗi nhân vật một trình xem riêng:
+
+| nhân vật | nguồn | dựng bằng | trang xem |
+|---|---|---|---|
+| Cô ca sĩ anime idol | VRoid Studio, 154 xương, 57 blendshape | `scripts/build_character.py` | `web/` |
+| Cung thủ Erika | `char6.fbx`, rig Mixamo 87 xương | `scripts/build_char6.py` | `web/char6.html` |
+| Hiệp sĩ thập tự | ba file `char4*.fbx`, rig Mixamo 86 xương | `scripts/build_char4.py` | `web/char4.html` |
+
+Cộng thêm một trang thứ tư, `web/idol_mimic.html`, cho cô ca sĩ diễn lại năm
+động tác của cung thủ để so hai bên cạnh nhau — bài toán chuyển động tác giữa
+hai bộ xương khác chuẩn hoàn toàn.
+
+Cô ca sĩ là phần lớn nhất: 19 trạng thái hoạt ảnh (5 trong đó retarget từ mocap
+thật), 57 blendshape khuôn mặt, khẩu hình bám theo tiếng hát, và một bản nhúng
+được vào trang khác. Phần lớn tài liệu bên dưới nói về nhân vật này.
 
 ```
 source/     Model nguồn — CHỈ ĐỌC. Không script nào được ghi vào đây.
@@ -19,6 +35,130 @@ mocap/      5 file BVH. Chưa dùng — xem "Việc còn dang dở".
 audio/      Nhạc nền cho trình xem.
 archive/    Bốn phương án đời trước và các bản viewer cũ. Không còn phát triển.
 ```
+
+## Bắt đầu
+
+Cần **Blender 4.5** (đường dẫn mặc định trên macOS là
+`/Applications/Blender.app/Contents/MacOS/Blender`) và **Python 3** cho vài
+tiện ích trong `tools/`. Không cần cài gói nào thêm: các script chỉ dùng thư
+viện có sẵn trong Blender.
+
+**Model nguồn không nằm trong repo.** Thư mục `source/` bị `.gitignore` loại,
+vì nó chứa file Mixamo và VRoid không nên phát tán lại. Muốn dựng lại thì phải
+xin riêng năm file này rồi bỏ vào `source/`:
+
+```
+source/char4.fbx                          hiệp sĩ, rig đầy đủ + take 445 khung
+source/char4_1.fbx                        hiệp sĩ, bản rút gọn (không bắt buộc)
+source/char4_e.fbx                        hiệp sĩ, bản đồ phân vùng + váy giáp
+source/char6.fbx                          cung thủ
+source/female_singer_anime_idol_base.glb  cô ca sĩ
+```
+
+Chưa có `source/` thì vẫn xem được các trang web nếu thư mục `build/` đã có
+sẵn; `build/` cũng bị gitignore vì dựng lại là ra.
+
+```bash
+# dựng lần lượt ba nhân vật
+BL=/Applications/Blender.app/Contents/MacOS/Blender
+$BL --background --factory-startup --python scripts/build_character.py
+$BL --background --factory-startup --python scripts/build_char6.py
+$BL --background --factory-startup --python scripts/build_char4.py
+$BL --background --factory-startup --python scripts/build_idol_mimic.py
+
+# rồi mở trình xem
+python3 -m http.server 8080
+```
+
+| trang | đường dẫn |
+|---|---|
+| studio cô ca sĩ | `http://localhost:8080/web/` |
+| cung thủ Erika | `http://localhost:8080/web/char6.html` |
+| hiệp sĩ thập tự | `http://localhost:8080/web/char4.html` |
+| cô ca sĩ bắt chước cung thủ | `http://localhost:8080/web/idol_mimic.html` |
+
+## Bốn bài học đắt nhất
+
+Bốn cái bẫy dưới đây đã ăn của tôi nhiều giờ và đều sẽ ăn lại của người sau,
+vì không cái nào báo lỗi — chúng chỉ cho ra kết quả sai một cách hợp lý.
+
+**Blender 4.4 trở lên: gán action thôi chưa đủ.** Phải gán cả `action_slot`.
+Thiếu slot thì action nằm đó mà không điều khiển gì, và mọi phép đọc tư thế
+trả về tư thế nghỉ. Lỗi này từng làm tôi kết luận nhầm rằng "sáu clip đã chết".
+
+```python
+ad.action = act
+if getattr(act, 'slots', None):
+    ad.action_slot = act.slots[0]     # thiếu dòng này là hỏng, không báo gì
+```
+
+**Bộ xuất glTF chỉ đọc NLA.** Action đang gán trực tiếp sẽ không được xuất, nên
+bước đẩy lên NLA phải chạy SAU CÙNG. Và nó đặt tên hoạt ảnh theo tên *action*
+chứ không theo tên track — hai action trùng tên là hỏng. Ngược lại, action còn
+sót trong file cũng bị nó vớ lấy: gỡ đối tượng ra khỏi cảnh chưa đủ, phải xoá
+cả action, nếu không nó gán bừa lên bộ xương khác.
+
+**`ray_cast` và `closest_point_on_mesh` đo trong hệ toạ độ RIÊNG của đối
+tượng.** Lưới gắn vào bộ xương Mixamo có tỉ lệ 0,01, nên truyền thẳng 0,30 m
+vào tham số `distance` thì thành 3 mm — không tia nào chạm được gì và phép thử
+báo "không có mặt nào khuất". Luôn quy đổi:
+
+```python
+unit = 1.0 / (obj.matrix_world.to_3x3() @ Vector((1, 0, 0))).length
+obj.ray_cast(origin_local, dir_local, distance=reach_met * unit)
+```
+
+**Xoá action không đưa pose channel về tư thế nghỉ.** `pose.bones[].matrix` giữ
+nguyên giá trị cuối cùng. Muốn tư thế nghỉ thật thì đọc
+`data.bones[].matrix_local`. Cùng họ với nó: xoá sạch khe vật liệu sau khi đã
+gán `poly.material_index` thì Blender kẹp mọi chỉ số về 0.
+
+## Ba nhân vật, ba bài toán khác nhau
+
+### Cung thủ Erika — `scripts/build_char6.py`
+
+`char6.fbx` trỏ tới chín texture không tồn tại, nên Blender tô toàn thân bằng
+màu hồng tím báo thiếu ảnh. Toàn bộ màu trong bản dựng là tự viết, không phải
+khôi phục. Ba mảnh `boots` / `trousers` / `armor` là bản sao cùng bề mặt với
+`body` — bản gốc chạy được vì mỗi mảnh lấy một vùng texture khác nhau; cho mỗi
+mảnh một màu đặc thì hai lớp tranh nhau độ sâu và ra loang lổ như áo rằn ri.
+Đã xoá phần bị phủ kín, so theo **trọng tâm mặt** chứ không theo từng đỉnh.
+
+Bảy "clip" trong file thật ra là một động tác bị cắt cụt ở bảy chỗ. Cắt lại
+thành năm clip đúng chỗ, dựng thêm mũi tên bay khi bắn, và nặn hai blendshape
+(nhắm mắt, mỉm cười) từ chính hình học vì model trắng trơn không có cái nào.
+
+### Hiệp sĩ thập tự — `scripts/build_char4.py`
+
+Ba file `char4*.fbx` hoá ra là cùng một nhân vật. `char4_1.fbx` không có gì mà
+`char4.fbx` chưa có. Sáu trong bảy lưới của `char4_e.fbx` **không phải chi tiết
+thêm**: đo từng đỉnh thì `armor` trùng 2082/2084 với lưới thân, `head`
+2014/2014, `boots` 1066/1066. Chúng là *bản đồ phân vùng* của chính lưới thân.
+
+Gộp thẳng cả ba file ra 22 571 đỉnh với sáu lớp chồng khít nhau. Dùng chúng làm
+bản đồ để gán vật liệu theo vùng thì còn 12 994 đỉnh mà nhiều màu hơn. Chỉ
+`trousers` là hình học mới — váy giáp và giáp đùi, `char4.fbx` thiếu hẳn.
+
+18 hoạt ảnh cũng là một: trượt từng clip ngắn dọc clip dài rồi so tư thế, cả 13
+clip ngắn đều khớp một đoạn của clip 445 khung với sai lệch dưới 1°. Cắt lại
+thành sáu clip, và lòi ra một đoạn *nhảy chém* mà không clip có tên nào chứa.
+
+Chữ thập trên khiên vẽ bằng hình học vì không có texture nào để dán: trục tấm
+lấy bằng phân tích trục chính, chiều pháp tuyến hỏi xương cầm, đầu phình là đầu
+trên. Bốn món trang bị tháo được từ trang web — mũ trụ, khiên, kiếm, váy giáp.
+
+### Chuyển động tác giữa hai rig — `scripts/build_idol_mimic.py`
+
+87 xương Mixamo sang 154 xương VRoid. Không chép quaternion được: cùng một số
+đo xoay đặt lên hai rig khác chuẩn cho ra hai tư thế khác nhau, vì hướng xương
+lúc nghỉ đã khác sẵn. Dùng lại `scripts/retarget.py` của phần mocap: bám hướng
+nối hai khớp, không quan tâm tư thế nghỉ.
+
+Bám hướng thôi vẫn chưa đủ cho ba chỗ. `_aim` chỉ ghim *hướng* của đoạn xương,
+còn góc xoay *quanh* chính hướng đó vẫn tự do — với xương chậu thì đoạn
+Hips→Spine gần như thẳng đứng, nên cái bị bỏ tự do chính là hướng mặt. Bảng
+`TWISTS` ghim thêm trục thứ hai: hai háng cho chậu, đường ngón trỏ–ngón út cho
+bàn tay, đường nối hai mắt cho đầu.
 
 ## Chạy trình xem
 
