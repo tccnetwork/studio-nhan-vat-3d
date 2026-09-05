@@ -242,51 +242,110 @@ def split_hood_hair():
 
 
 # Mũi tên nằm ngửa dưới chân vì xương "arrow" treo vào Hips, và đo được nó
-# đứng yên tuyệt đối trong cả bảy clip — không clip nào dùng nó để bắn. Chuyển
-# sang treo vào chính xương cầm cung thì nó đi theo cung ở mọi tư thế, trông
-# như đã lắp sẵn trên dây, mà không phải dựng thêm một khung hoạt ảnh nào.
-BOW_BONE = 'mixamorig:Left_arch1'
+# đứng yên tuyệt đối trong cả bảy clip — không clip nào dùng nó để bắn.
+QUIVER_MESH = 'arrow_box'
+QUIVER_BONE = 'mixamorig:Spine2'      # ống tên bám chủ yếu vào xương này
 ARROW_BONE = 'mixamorig:arrow'
-ARROW_AHEAD = 0.12      # mét, phần mũi nhô ra trước tay cầm
-ARROW_LIFT = 0.02       # mét, nâng khỏi tay cầm cho khỏi cắm vào cung
+ARROW_PROUD = 0.045                   # mét, nhô cao hơn bó tên sẵn có
+ARROW_ASIDE = 0.030                   # mét, lệch sang bên cho khỏi cắm vào nhau
 
 
-def nock_arrow_on_bow():
-    """Dời mũi tên lên cung và đổi xương cha sang xương cầm cung."""
-    import math
+def _mesh_islands(obj):
+    """Các mảnh rời của một lưới, trả về danh sách toạ độ thế giới."""
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    mw = obj.matrix_world
+    seen, parts = set(), []
+    for v in bm.verts:
+        if v.index in seen:
+            continue
+        stack, comp = [v], []
+        seen.add(v.index)
+        while stack:
+            x = stack.pop()
+            comp.append(mw @ x.co)
+            for e in x.link_edges:
+                y = e.other_vert(x)
+                if y.index not in seen:
+                    seen.add(y.index)
+                    stack.append(y)
+        parts.append(comp)
+    bm.free()
+    return parts
+
+
+def _long_axis(pts):
+    """Tâm, trục dài nhất và chiều dài của một đám điểm."""
+    from mathutils import Matrix, Vector
+    c = sum(pts, Vector()) / len(pts)
+    xx = yy = zz = xy = xz = yz = 0.0
+    for p in pts:
+        d = p - c
+        xx += d.x * d.x; yy += d.y * d.y; zz += d.z * d.z
+        xy += d.x * d.y; xz += d.x * d.z; yz += d.y * d.z
+    M = Matrix(((xx, xy, xz), (xy, yy, yz), (xz, yz, zz)))
+    v = Vector((0.3, 0.2, 1.0)).normalized()
+    for _ in range(50):
+        v = (M @ v).normalized()
+    if v.z < 0:
+        v = -v
+    ext = [(p - c).dot(v) for p in pts]
+    return c, v, max(ext) - min(ext), max(ext)
+
+
+def put_arrow_in_quiver():
+    """Cắm mũi tên rời vào ống tên sau lưng, căn theo bó tên đã có sẵn.
+
+    Vì sao không để trên cung: xương "arrow" vốn treo vào Hips và đo được nó
+    đứng yên tuyệt đối trong cả bảy clip, tức chưa bao giờ được dùng để bắn.
+    Lắp sẵn lên dây thì nhìn không hợp lý vì nhân vật còn phải rút tên trong
+    đoạn 02_RutTen.
+
+    Hướng và độ cao lấy từ chính năm thân tên đang nằm trong ống, không đặt số
+    cứng: chúng dài 0,374 m vì chỉ dựng nửa trên, còn mũi tên rời dài 0,75 m
+    nên phải căn theo ĐẦU TRÊN chứ không phải theo tâm.
+    """
     from mathutils import Matrix, Vector
     arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
     mesh = bpy.data.objects.get('arrow')
-    if arm is None or mesh is None:
+    quiver = bpy.data.objects.get(QUIVER_MESH)
+    if arm is None or mesh is None or quiver is None:
         return
-    bones = arm.data.bones
-    if BOW_BONE not in bones or ARROW_BONE not in bones:
+    if QUIVER_BONE not in arm.data.bones or ARROW_BONE not in arm.data.bones:
         return
 
-    mw = arm.matrix_world
-    grip = mw @ bones[BOW_BONE].head_local
-    limb = (mw @ bones[BOW_BONE].tail_local - grip).normalized()
+    # Năm thân tên trong ống: các mảnh dài gần bằng nhau, ít đỉnh.
+    shafts = []
+    for pts in _mesh_islands(quiver):
+        if not (6 <= len(pts) <= 12):
+            continue
+        c, v, length, top = _long_axis(pts)
+        if 0.25 < length < 0.55:
+            shafts.append((c, v, top))
+    if not shafts:
+        return
+    axis = sum((v for _c, v, _t in shafts), Vector()) / len(shafts)
+    axis.normalize()
+    tops = [c + v * t for c, v, t in shafts]
+    top_mid = sum(tops, Vector()) / len(tops)
+    side = axis.cross(Vector((0.0, 1.0, 0.0)))
+    if side.length < 1e-4:
+        side = Vector((1.0, 0.0, 0.0))
+    side.normalize()
 
-    # Trục dọc mũi tên hiện tại và tâm của nó, đo từ chính lưới.
     mmw = mesh.matrix_world
     pts = [mmw @ v.co for v in mesh.data.vertices]
     centre = sum(pts, Vector()) / len(pts)
-    axis = Vector((0.0, 1.0, 0.0))          # đo được: mũi tên nằm dọc +Y
-    half = max((p - centre).dot(axis) for p in pts)
+    own = Vector((0.0, 1.0, 0.0))          # đo được: mũi tên nằm dọc +Y
+    half = max((p - centre).dot(own) for p in pts)
 
-    # Hướng bắn: vuông góc với cả trục cánh cung lẫn trục xương cầm cung.
-    shoot = limb.cross(Vector((0.0, 1.0, 0.0)))
-    if shoot.length < 1e-4:
-        shoot = Vector((1.0, 0.0, 0.0))
-    shoot.normalize()
-    if shoot.x < 0:                          # mũi phải hướng ra ngoài, xa thân
-        shoot = -shoot
-    target = grip + shoot * (ARROW_AHEAD - half) + limb * ARROW_LIFT
-
-    rot = axis.rotation_difference(shoot).to_matrix().to_4x4()
+    target = top_mid + axis * (ARROW_PROUD - half) + side * ARROW_ASIDE
+    rot = own.rotation_difference(axis).to_matrix().to_4x4()
     xform = Matrix.Translation(target) @ rot @ Matrix.Translation(-centre)
 
-    for v in mesh.data.vertices:            # lưới bám cứng vào một xương duy nhất
+    for v in mesh.data.vertices:
         v.co = mmw.inverted() @ (xform @ (mmw @ v.co))
     mesh.data.update()
 
@@ -294,23 +353,23 @@ def nock_arrow_on_bow():
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode='EDIT')
     eb = arm.data.edit_bones
-    a, b = eb[ARROW_BONE], eb[BOW_BONE]
+    a = eb[ARROW_BONE]
+    mw = arm.matrix_world
     a.head = mw.inverted() @ (xform @ (mw @ a.head))
     a.tail = mw.inverted() @ (xform @ (mw @ a.tail))
-    a.parent = b
+    a.parent = eb[QUIVER_BONE]
     bpy.ops.object.mode_set(mode='OBJECT')
     bpy.context.view_layer.objects.active = prev
 
-    # Khoá cũ của xương này được viết trong hệ của Hips; giữ lại sau khi đổi cha
-    # là đặt mũi tên sai chỗ. Chúng vốn đứng yên nên bỏ đi không mất gì.
     dropped = 0
     for act in bpy.data.actions:
         for fc in [f for f in act.fcurves
                    if f.data_path.startswith('pose.bones["%s"]' % ARROW_BONE)]:
             act.fcurves.remove(fc)
             dropped += 1
-    print('    lắp mũi tên lên cung: đổi cha sang %s, bỏ %d đường cong cũ'
-          % (BOW_BONE.replace('mixamorig:', ''), dropped))
+    print('    cắm mũi tên vào ống: căn theo %d thân tên sẵn có, '
+          'đổi cha sang %s, bỏ %d đường cong cũ'
+          % (len(shafts), QUIVER_BONE.replace('mixamorig:', ''), dropped))
 
 
 def drop_duplicate_actions():
@@ -340,11 +399,15 @@ def drop_duplicate_actions():
 # Bản đầy đủ là một chu trình bắn cung, và các khung 62, 138, 173, 202 có tư
 # thế giống hệt nhau (lệch 0°) — đó là thế thủ mà mỗi đoạn đều quay về. Nên cắt
 # ở đúng bốn mốc ấy thì được bốn clip tự khép vòng và nối được với nhau.
+# Tên đặt theo thứ NHÌN THẤY trên ảnh dựng từng đoạn, không theo suy đoán từ
+# số đo. Lần đầu tôi đặt tên theo cao độ bàn tay và sai cả bốn: đoạn 2 tưởng là
+# "rút tên" hoá ra là nhào lộn trên không, đoạn 3 tưởng "giương và bắn" hoá ra
+# chỉ nâng cung lên rồi hạ xuống. TRONG CẢ BỐN ĐOẠN KHÔNG CÓ ĐỘNG TÁC BẮN NÀO.
 SEGMENTS = [
-    ('01_VaoThe',      1,  62),   # từ tư thế gốc vào thế thủ
-    ('02_RutTen',     62, 138),   # tay phải hạ xuống 0,03 rồi đưa lên 1,51
-    ('03_GuongVaBan', 138, 173),  # tay phải lên 1,67, hai tay cách nhau 0,23
-    ('04_HaCung',     173, 202),  # trở về thế thủ
+    ('01_DungVaBuoc',  1,  62),   # đứng thở, rồi bước lấn tới một nhịp
+    ('02_NhaoLon',    62, 138),   # bật nhảy, lộn trên không rồi tiếp đất
+    ('03_NangCung',  138, 173),   # đưa cung lên quá đầu rồi hạ xuống
+    ('04_XoayNguoi', 173, 202),   # xoay người tại chỗ rồi về hướng cũ
 ]
 
 
@@ -452,7 +515,7 @@ def main():
         print('    %-14s %-10s %s  nhám %.2f' % (obj.name, label, color, rough))
 
     print('>>> Lắp mũi tên và dọn hoạt ảnh')
-    nock_arrow_on_bow()
+    put_arrow_in_quiver()
     drop_duplicate_actions()
     split_long_clip()
 

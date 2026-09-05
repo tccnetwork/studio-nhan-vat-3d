@@ -207,7 +207,7 @@ dl.facts dd {
         <dt>lưới</dt><dd>13</dd>
         <dt>đỉnh</dt><dd>12 492</dd>
         <dt>vật liệu</dt><dd>3 → 17</dd>
-        <dt>mũi tên</dt><dd>trên cung</dd>
+        <dt>mũi tên</dt><dd>trong ống</dd>
         <dt>texture</dt><dd>0</dd>
         <dt>xương</dt><dd>87</dd>
         <dt>clip Mixamo</dt><dd>7 → 4</dd>
@@ -236,9 +236,9 @@ dl.facts dd {
 
       <li><b>Mũi tên nằm ngửa dưới chân.</b> Xương <code>arrow</code> treo vào
       <code>Hips</code> và đo được nó đứng yên tuyệt đối trong cả bảy clip — không
-      clip nào dùng nó để bắn. Đã đổi cha sang chính xương cầm cung, đặt cách tay
-      cầm <span class="num">18,7</span> cm ở độ cao <span class="num">1,40</span> m,
-      nên giờ nó đi theo cung ở mọi tư thế. Tiện thể bỏ
+      clip nào dùng nó để bắn. Đã cắm vào ống tên sau lưng, đổi cha sang
+      <code>Spine2</code> và căn hướng theo <span class="num">5</span> thân tên có
+      sẵn trong ống chứ không đặt số cứng. Tiện thể bỏ
       <span class="num">2</span> clip trùng lặp hoàn toàn — kiểm ở mức dữ liệu thì
       chúng giống hệt nhau ở cả <span class="num">264</span> kênh.</li>
 
@@ -331,8 +331,8 @@ loader.load(MODEL, gltf => {
   gltf.animations.forEach((clip, i) => {
     const b = document.createElement('button');
     // Tên clip có nghĩa hơn độ dài, sau khi đã cắt clip dài thành bốn đoạn.
-    const nice = { '01_VaoThe': 'Vào thế', '02_RutTen': 'Rút tên',
-                   '03_GuongVaBan': 'Giương & bắn', '04_HaCung': 'Hạ cung' };
+    const nice = { '01_DungVaBuoc': 'Đứng & bước', '02_NhaoLon': 'Nhào lộn',
+                   '03_NangCung': 'Nâng cung', '04_XoayNguoi': 'Xoay người' };
     b.textContent = (nice[clip.name] || clip.name)
                   + '  ' + clip.duration.toFixed(1) + 's';
     b.addEventListener('click', () => play(clip, b));
