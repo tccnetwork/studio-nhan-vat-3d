@@ -207,7 +207,7 @@ dl.facts dd {
         <dt>lưới</dt><dd>13</dd>
         <dt>đỉnh</dt><dd>12 492</dd>
         <dt>vật liệu</dt><dd>3 → 17</dd>
-        <dt>mũi tên rời</dt><dd>đã bỏ</dd>
+        <dt>mũi tên</dt><dd>bay khi bắn</dd>
         <dt>texture</dt><dd>0</dd>
         <dt>xương</dt><dd>87</dd>
         <dt>clip Mixamo</dt><dd>7 → 4</dd>
@@ -217,7 +217,7 @@ dl.facts dd {
   </div>
 
   <section class="notes card">
-    <h2>Sáu chỗ phải gỡ</h2>
+    <h2>Bảy chỗ phải gỡ</h2>
     <ol>
       <li><b>Bảy món quần áo dùng chung một vật liệu.</b> Không có texture thì áo,
       giáp, mũ, quần, giày, ống tên và ống tay thành một khối màu duy nhất. Tách
@@ -241,6 +241,12 @@ dl.facts dd {
       sẵn trong ống chứ không đặt số cứng. Tiện thể bỏ
       <span class="num">2</span> clip trùng lặp hoàn toàn — kiểm ở mức dữ liệu thì
       chúng giống hệt nhau ở cả <span class="num">264</span> kênh.</li>
+
+      <li><b>Đoạn “Bắn cung” là một chu trình bắn đầy đủ</b> — với tay ra sau vai
+      lấy tên, lắp vào cung, giương cho dây căng hình chữ V, rồi buông. Tôi đọc
+      sai hai lần trước khi thấy: lần đầu đoán theo cao độ bàn tay, lần sau xem
+      sáu khung thưa và tưởng chỉ là “nâng cung rồi hạ”. Phải dựng chín khung mỗi
+      nửa mới đọc ra.</li>
 
       <li><b>Bảy “clip” chỉ là một động tác bị cắt cụt.</b> Trượt từng clip ngắn
       dọc clip dài thì cả bốn đều khớp từ khung 1 với sai lệch <span class="num">0°</span> —
@@ -332,7 +338,7 @@ loader.load(MODEL, gltf => {
     const b = document.createElement('button');
     // Tên clip có nghĩa hơn độ dài, sau khi đã cắt clip dài thành bốn đoạn.
     const nice = { '01_DungVaBuoc': 'Đứng & bước', '02_NhaoLon': 'Nhào lộn',
-                   '03_NangCung': 'Nâng cung', '04_XoayNguoi': 'Xoay người' };
+                   '03_BanCung': '🏹 Bắn cung', '04_XoayNguoi': 'Xoay người' };
     b.textContent = (nice[clip.name] || clip.name)
                   + '  ' + clip.duration.toFixed(1) + 's';
     b.addEventListener('click', () => play(clip, b));

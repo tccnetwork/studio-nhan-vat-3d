@@ -247,7 +247,7 @@ def split_hood_hair():
 # dài 0,374 m — cắm chung vào ống thì nó thò ra dài gấp đôi, nhìn không hợp.
 # Trên cung cũng không hợp vì chưa có động tác bắn nào. Nên bỏ hẳn nó khỏi bản
 # xuất. Đặt False thì quay lại cách cắm vào ống.
-HIDE_ARROW = True
+HIDE_ARROW = False
 
 QUIVER_MESH = 'arrow_box'
 QUIVER_BONE = 'mixamorig:Spine2'      # ống tên bám chủ yếu vào xương này
@@ -299,6 +299,120 @@ def _long_axis(pts):
         v = -v
     ext = [(p - c).dot(v) for p in pts]
     return c, v, max(ext) - min(ext), max(ext)
+
+
+# Mốc thời gian của chu trình bắn trong đoạn 03, đọc từ ảnh dựng dày:
+#   0,33-0,50  với tay ra sau vai lấy tên
+#   0,50-0,70  đưa xuống lắp vào cung
+#   0,70-1,10  giương, dây căng hình chữ V
+#   ~1,10      buông
+SHOT_CLIP = '03_BanCung'
+T_GRAB = 0.36        # giây, tay chạm ống tên
+T_NOCK = 0.62        # giây, tên đã nằm trên dây
+# Buông ở 1,02 chứ không phải 1,10: đoạn chỉ dài 1,20 giây, buông muộn thì mũi
+# tên chỉ còn hai khung để bay và mắt không kịp thấy gì.
+T_LOOSE = 1.02       # giây, buông dây
+# Tên thật bay 60 m/s. Ở đây chậm hơn nhiều, vì trong sáu khung còn lại mà bay
+# đúng tốc độ thật thì nó đi 12 mét, tức biến mất ngay khung đầu tiên.
+FLY_SPEED = 15.0     # m/s
+FLY_FADE = 0.16      # giây để thu nhỏ về 0 sau khi bay
+
+
+def animate_arrow_shot():
+    """Cho mũi tên hiện ra đúng lúc và bay đi khi buông dây.
+
+    Ba chặng, đều bám theo vị trí THẬT của bàn tay và tay cầm cung ở từng khung
+    chứ không đặt toạ độ cứng:
+
+      ẩn        trước khi với tay lấy tên, và trong ba đoạn còn lại
+      trên tay  từ lúc chạm ống tên tới lúc lắp xong
+      trên dây  từ lúc lắp tới lúc buông: gốc ở tay kéo, mũi chỉ qua tay cầm cung
+      bay       sau khi buông: đi thẳng theo hướng bắn rồi thu nhỏ về 0
+    """
+    from mathutils import Matrix, Vector
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    mesh = bpy.data.objects.get('arrow')
+    act = bpy.data.actions.get(SHOT_CLIP)
+    if arm is None or mesh is None or act is None:
+        return
+    ad = arm.animation_data
+    ad.action = act
+    if getattr(act, 'slots', None):
+        ad.action_slot = act.slots[0]
+
+    mw = arm.matrix_world
+    pb = arm.pose.bones[ARROW_BONE]
+    bpy.context.scene.frame_set(1)
+    bpy.context.view_layer.update()
+    rest_bone = pb.matrix.copy()          # tư thế xương khi chưa đặt gì
+
+    pts = [mesh.matrix_world @ v.co for v in mesh.data.vertices]
+    centre = sum(pts, Vector()) / len(pts)
+    own = Vector((0.0, 1.0, 0.0))         # đo được: mũi tên nằm dọc +Y
+    half = max((p - centre).dot(own) for p in pts)
+
+    def place(nock_at, direction, scale):
+        """Đặt gốc mũi tên vào nock_at, mũi chỉ theo direction."""
+        d = direction.normalized()
+        rot = own.rotation_difference(d).to_matrix().to_4x4()
+        want = Matrix.Translation(nock_at + d * half) @ rot @ Matrix.Translation(-centre)
+        m = mw.inverted() @ want @ mw @ rest_bone
+        pb.matrix = m
+        pb.scale = (scale, scale, scale)
+
+    fps = 30.0
+    n = int(act.frame_range[1])
+    loose_f = int(round(T_LOOSE * fps)) + 1
+    fly_dir = None
+    fly_from = None
+    for f in range(1, n + 1):
+        bpy.context.scene.frame_set(f)
+        bpy.context.view_layer.update()
+        t = (f - 1) / fps
+        g = lambda nm: mw @ arm.pose.bones[nm].head
+        rh, grip = g('mixamorig:RightHand'), g('mixamorig:Left_arch1')
+
+        if t < T_GRAB:
+            pb.scale = (0.0, 0.0, 0.0)
+        elif t < T_NOCK:
+            # cầm trên tay, mũi hướng về phía cung
+            place(rh, (grip - rh), 1.0)
+        elif f <= loose_f:
+            place(rh, (grip - rh), 1.0)
+            fly_dir = (grip - rh).normalized()
+            fly_from = grip
+        else:
+            dt = (f - loose_f) / fps
+            scale = max(0.0, 1.0 - dt / FLY_FADE)
+            place(fly_from + fly_dir * (FLY_SPEED * dt), fly_dir, scale)
+
+        pb.keyframe_insert(data_path='location', frame=f)
+        pb.keyframe_insert(data_path='rotation_quaternion', frame=f)
+        pb.keyframe_insert(data_path='scale', frame=f)
+
+    # Ba đoạn còn lại: giấu hẳn mũi tên đi.
+    for other in bpy.data.actions:
+        if other.name == SHOT_CLIP:
+            continue
+        end = int(other.frame_range[1])
+        path = 'pose.bones["%s"].scale' % ARROW_BONE
+        for i in range(3):
+            # Đường cong này đã có sẵn từ lúc cắt đoạn, tạo lại là lỗi.
+            fc = next((f for f in other.fcurves
+                       if f.data_path == path and f.array_index == i), None)
+            if fc is None:
+                fc = other.fcurves.new(path, index=i)
+            else:
+                # clear() chứ không remove() từng cái: xoá trong lúc duyệt thì
+                # chỉ số trượt và Blender báo "Keyframe not in F-Curve".
+                fc.keyframe_points.clear()
+            for fr in (1, end):
+                kp = fc.keyframe_points.insert(fr, 0.0)
+                kp.interpolation = 'CONSTANT'
+            fc.update()
+    print('    mũi tên: hiện ở %.2fs, lắp lúc %.2fs, buông ở khung %d, '
+          'tắt sau %.2fs; ba đoạn kia giấu hẳn'
+          % (T_GRAB, T_NOCK, loose_f, FLY_FADE))
 
 
 def hide_arrow():
@@ -429,13 +543,14 @@ def drop_duplicate_actions():
 # thế giống hệt nhau (lệch 0°) — đó là thế thủ mà mỗi đoạn đều quay về. Nên cắt
 # ở đúng bốn mốc ấy thì được bốn clip tự khép vòng và nối được với nhau.
 # Tên đặt theo thứ NHÌN THẤY trên ảnh dựng từng đoạn, không theo suy đoán từ
-# số đo. Lần đầu tôi đặt tên theo cao độ bàn tay và sai cả bốn: đoạn 2 tưởng là
-# "rút tên" hoá ra là nhào lộn trên không, đoạn 3 tưởng "giương và bắn" hoá ra
-# chỉ nâng cung lên rồi hạ xuống. TRONG CẢ BỐN ĐOẠN KHÔNG CÓ ĐỘNG TÁC BẮN NÀO.
+# số đo. Lần đầu tôi đặt tên theo cao độ bàn tay và sai cả bốn; lần thứ hai
+# xem sáu khung thưa của đoạn 3 và vẫn đọc sai thành "nâng cung rồi hạ".
+# Dựng dày chín khung mỗi nửa mới thấy: 0,78-1,08 giây dây cung căng hình chữ
+# V, tay phải kéo về sau, rồi 1,14 giây buông. ĐÓ LÀ MỘT CHU TRÌNH BẮN ĐẦY ĐỦ.
 SEGMENTS = [
     ('01_DungVaBuoc',  1,  62),   # đứng thở, rồi bước lấn tới một nhịp
     ('02_NhaoLon',    62, 138),   # bật nhảy, lộn trên không rồi tiếp đất
-    ('03_NangCung',  138, 173),   # đưa cung lên quá đầu rồi hạ xuống
+    ('03_BanCung',   138, 173),   # với tay lấy tên, lắp, giương, buông dây
     ('04_XoayNguoi', 173, 202),   # xoay người tại chỗ rồi về hướng cũ
 ]
 
@@ -701,9 +816,12 @@ def main():
         print('    %-14s %-10s %s  nhám %.2f' % (obj.name, label, color, rough))
 
     print('>>> Lắp mũi tên và dọn hoạt ảnh')
-    hide_arrow() if HIDE_ARROW else put_arrow_in_quiver()
+    if HIDE_ARROW:
+        hide_arrow()
     drop_duplicate_actions()
     split_long_clip()
+    if not HIDE_ARROW:
+        animate_arrow_shot()
     shoot = make_shoot_clip() if MAKE_SHOOT else None
     if shoot is not None:
         ad = next(o for o in bpy.data.objects if o.type == 'ARMATURE').animation_data
