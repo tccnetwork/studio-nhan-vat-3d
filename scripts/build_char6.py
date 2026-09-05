@@ -306,8 +306,8 @@ def _long_axis(pts):
 #   0,50-0,70  đưa xuống lắp vào cung
 #   0,70-1,10  giương, dây căng hình chữ V
 #   ~1,10      buông
-SHOT_CLIP = '03_BanCung'
-DEATH_CLIP = '02_GucNga'
+SHOT_CLIP = '04_BanCung'
+DEATH_CLIP = '03_GucNga'
 T_GRAB = 0.36        # giây, tay chạm ống tên
 T_NOCK = 0.62        # giây, tên đã nằm trên dây
 # Buông ở 1,02 chứ không phải 1,10: đoạn chỉ dài 1,20 giây, buông muộn thì mũi
@@ -637,11 +637,15 @@ def drop_duplicate_actions():
 # xem sáu khung thưa của đoạn 3 và vẫn đọc sai thành "nâng cung rồi hạ".
 # Dựng dày chín khung mỗi nửa mới thấy: 0,78-1,08 giây dây cung căng hình chữ
 # V, tay phải kéo về sau, rồi 1,14 giây buông. ĐÓ LÀ MỘT CHU TRÌNH BẮN ĐẦY ĐỦ.
+# Đoạn 1 gốc gồm hai phần dính nhau. Đo mức đổi tư thế từng khung: khung 2-29
+# chỉ đổi 8-12° (đứng thở), khung 30 vọt lên 418° rồi giữ cao — đó là chỗ nhân
+# vật bắt đầu di chuyển. Tách ra thành hai clip.
 SEGMENTS = [
-    ('01_DungYen',     1,  62),   # đứng thở tại chỗ
-    ('02_GucNga',     62, 138),   # trúng đòn, ngã ngửa, nằm sấp dưới đất
-    ('03_BanCung',   138, 173),   # với tay lấy tên, lắp, giương, buông dây
-    ('04_TrungDon',  173, 202),   # giật người vì trúng đòn rồi đứng lại
+    ('01_DungYen',     1,  29),   # đứng thở tại chỗ, gần như bất động
+    ('02_DiChuyen',   30,  62),   # bắt đầu từ khung 30, nơi tư thế vọt 418°
+    ('03_GucNga',     62, 138),   # trúng đòn, ngã ngửa, nằm sấp dưới đất
+    ('04_BanCung',   138, 173),   # với tay lấy tên, lắp, giương, buông dây
+    ('05_TrungDon',  173, 202),   # giật người vì trúng đòn rồi đứng lại
 ]
 
 
@@ -827,6 +831,90 @@ def make_shoot_clip():
     print('    dựng %s: %d khung, buông ở khung %d, mũi tên tắt ở khung %d'
           % (SHOOT_NAME, n_frames, rel_f, gone_f))
     return act
+
+
+IDLE_CLIP = '01_DungYen'
+
+
+def loop_idle_clip():
+    """Hoà đuôi đoạn đứng yên về khung đầu để nó lặp không giật.
+
+    Idle là clip duy nhất thật sự cần lặp. Đo được nó giật 31 lần mức đổi bình
+    thường ở mối nối, hông nhảy 5,8 mm mỗi vòng — nhìn ra ngay vì phần còn lại
+    của clip gần như bất động (0,9° mỗi khung).
+
+    Cửa sổ hoà tự chọn theo tỉ số giữa mức lệch và bước thường, để phần sửa mỗi
+    khung không lớn hơn chuyển động vốn có. Xong thì bỏ khung cuối vì nó đã
+    trùng khít khung đầu, giữ lại là đứng hình thêm một khung mỗi vòng.
+    """
+    from mathutils import Quaternion
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    act = bpy.data.actions.get(IDLE_CLIP)
+    if arm is None or act is None:
+        return
+    ad = arm.animation_data
+    ad.action = act
+    if getattr(act, 'slots', None):
+        ad.action_slot = act.slots[0]
+    scene = bpy.context.scene
+    n = int(act.frame_range[1])
+    bones = [pb for pb in arm.pose.bones
+             if any(fc.data_path == 'pose.bones["%s"].rotation_quaternion' % pb.name
+                    for fc in act.fcurves)]
+    if not bones or n < 8:
+        return
+
+    def snapshot(f):
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        return {pb.name: pb.rotation_quaternion.copy() for pb in bones}
+
+    def gap(a, b):
+        return sum(math.degrees(2 * math.acos(min(1.0, abs(a[pb.name].dot(b[pb.name])))))
+                   for pb in bones)
+
+    head = snapshot(1)
+    tail = snapshot(n)
+    steps = []
+    prev = head
+    for f in range(2, n + 1):
+        cur = snapshot(f)
+        steps.append(gap(prev, cur))
+        prev = cur
+    steps.sort()
+    step = max(0.3, steps[len(steps) // 2])
+    want = int(math.ceil(gap(tail, head) / (0.6 * step)))
+    blend = max(3, min(want, n // 2))
+
+    hips = arm.pose.bones.get('mixamorig:Hips')
+    scene.frame_set(1)
+    bpy.context.view_layer.update()
+    head_loc = hips.location.copy() if hips else None
+
+    for i in range(blend):
+        f = n - blend + 1 + i
+        w = (i + 1) / blend
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        for pb in bones:
+            cur = pb.rotation_quaternion.copy()
+            tgt = head[pb.name].copy()
+            if cur.dot(tgt) < 0.0:
+                tgt.negate()
+            pb.rotation_quaternion = cur.slerp(tgt, w)
+            pb.keyframe_insert(data_path='rotation_quaternion', frame=f)
+        if hips and head_loc is not None:
+            hips.location = hips.location.lerp(head_loc, w)
+            hips.keyframe_insert(data_path='location', frame=f)
+
+    for fc in act.fcurves:
+        keep = [(kp.co[0], kp.co[1]) for kp in fc.keyframe_points if kp.co[0] < n - 0.5]
+        fc.keyframe_points.clear()
+        for x, y in keep:
+            fc.keyframe_points.insert(x, y).interpolation = 'LINEAR'
+        fc.update()
+    print('    khép vòng %s: lệch %.0f°, bước thường %.1f° -> hoà %d khung, còn %d khung'
+          % (IDLE_CLIP, gap(tail, head), step, blend, n - 1))
 
 
 def push_actions_to_nla():
@@ -1068,6 +1156,7 @@ def main():
     drop_duplicate_actions()
     split_long_clip()
     trim_death_tail()
+    loop_idle_clip()
     if not HIDE_ARROW:
         animate_arrow_shot()
     push_actions_to_nla()
