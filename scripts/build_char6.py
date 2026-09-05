@@ -40,6 +40,14 @@ OUT_DIR = os.path.join(ROOT, 'build', 'char6')
 # thật ra là áo choàng trùm đầu phủ cả vai, còn "armor" là áo tunic quấn và
 # váy. Vải đi họ xanh rêu, da thuộc đi họ nâu, da người là điểm ấm duy nhất —
 # tách hai họ ra thì mắt đọc được ngay đâu là vải đâu là da.
+# Toàn bộ quần áo, ống tên và cây cung dùng CHUNG một màu. Chỉ da người, tóc,
+# mắt và mũi tên là giữ màu riêng. Độ nhám thì vẫn khác nhau theo chất liệu —
+# vải nhám 0,84-0,90, da thuộc 0,45-0,52 — nên hình khối vẫn đọc được dù cùng
+# một sắc. Đặt None thì quay lại bảng màu nhiều màu bên dưới.
+UNIFORM_COLOR = '#55663F'
+UNIFORM_PARTS = ('helmet', 'armor', 'body', 'trousers', 'boots',
+                 'sleeve_left', 'sleeve_right', 'arrow_box', 'bow')
+
 LOOK = {
     'HeadAndHand':  ('#CB9E7F', 0.52, 0.0, 'Da'),
     'helmet':       ('#2C3927', 0.88, 0.0, 'AoChoangTrum'),
@@ -1388,13 +1396,16 @@ def main():
             print('    ! chưa có màu cho lưới', obj.name)
             continue
         color, rough, metal, label = spec
+        if UNIFORM_COLOR and obj.name in UNIFORM_PARTS:
+            color = UNIFORM_COLOR
         obj.data.materials.append(
             make_material('Char6_' + label, color, rough, metal))
         for poly in obj.data.polygons:
             poly.material_index = 0
         if obj.name == 'body':
             obj.data.materials.append(
-                make_material('Char6_VanhGiay', LOOK['boots'][0],
+                make_material('Char6_VanhGiay',
+                              UNIFORM_COLOR or LOOK['boots'][0],
                               LOOK['boots'][1], 0.0))
             mw = obj.matrix_world
             low = 0
