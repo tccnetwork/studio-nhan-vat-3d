@@ -755,15 +755,18 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
 
     # Tra ngược tên xương nguồn theo tên xương đích, để phép ghim hướng mặt
     # dùng được với mọi bảng ánh xạ chứ không chỉ bảng BVH.
-    # Phần lệch sẵn có giữa hai hướng nhìn lúc nghỉ, để trừ đi khi căn đầu.
-    q_head = None
+    # Hướng nhìn lúc NGHỈ của từng rig. Không quy về một hướng chung: mỗi rig
+    # quay đúng cùng một góc so với tư thế nghỉ của chính nó, nên phần lệch sẵn
+    # tự triệt tiêu ở mọi tư thế.
+    look_rest = None
     if SRC_HEAD and SRC_EYES:
         a = _look_dir_rest(bvh_arm, SRC_HEAD, SRC_EYES)
         b = _look_dir_rest(char_arm, HEAD, HEAD_EYES)
         if a is not None and b is not None:
-            q_head = a.rotation_difference(b)
-            print('    căn hướng nhìn: lệch sẵn %.0f° giữa hai rig'
-                  % math.degrees(a.angle(b)))
+            look_rest = (a, b)
+            print('    căn hướng nhìn: nghỉ nguồn %s, nghỉ đích %s, lệch %.0f°'
+                  % (['%.2f' % x for x in a], ['%.2f' % x for x in b],
+                     math.degrees(a.angle(b))))
 
     hips_pb = char_arm.pose.bones['J_Bip_C_Hips']
     hips_rest = char_arm.data.bones['J_Bip_C_Hips'].head_local.copy()
@@ -818,8 +821,14 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
             pb.keyframe_insert(data_path='rotation_quaternion', frame=out_frame)
 
         # --- đầu: bám hướng nhìn, làm sau cùng vì không xương nào treo vào nó
-        if q_head is not None:
-            want = q_head @ _look_dir(bvh_arm, SRC_HEAD, SRC_EYES)
+        if look_rest is not None:
+            a, b = look_rest
+            # Góc mà đầu nguồn đã quay đi so với tư thế nghỉ của nó, đem áp
+            # nguyên vào hướng nghỉ của đầu đích. Xoay thẳng hướng nguồn bằng
+            # một phép quay cố định thì chỉ đúng lúc đầu chưa quay: đầu càng
+            # quay, sai số càng lớn — đo được tới 70° ở đoạn bắn cung.
+            want = a.rotation_difference(
+                _look_dir(bvh_arm, SRC_HEAD, SRC_EYES)) @ b
             cur = _look_dir(char_arm, HEAD, HEAD_EYES)
             if cur is not None:
                 pb = char_arm.pose.bones[HEAD]
@@ -828,6 +837,14 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
                 m.translation = pb.matrix.translation
                 pb.matrix = m
                 bpy.context.view_layer.update()
+                # Vector khớp-đầu→giữa-hai-mắt dựng đứng tới 71°, nên căn riêng
+                # nó vẫn bỏ tự do góc xoay QUANH nó — tức góc quay trái phải của
+                # đầu. Ghim nốt bằng đường nối hai mắt: trục này nằm ngang và có
+                # nghĩa như nhau ở cả hai rig, không cần trừ phần lệch nào.
+                _twist(char_arm, HEAD,
+                       _look_dir(char_arm, HEAD, HEAD_EYES),
+                       _bone_gap(char_arm, HEAD_EYES[0], HEAD_EYES[1]),
+                       _bone_gap(bvh_arm, SRC_EYES[0], SRC_EYES[1]))
                 pb.keyframe_insert(data_path='rotation_quaternion',
                                    frame=out_frame)
         hips_pb.keyframe_insert(data_path='location', frame=out_frame)

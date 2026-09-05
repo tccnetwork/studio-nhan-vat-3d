@@ -85,8 +85,10 @@ HAND_DST = ('J_Bip_L_Hand', 'J_Bip_L_Middle1',
             'J_Bip_L_Index1', 'J_Bip_L_Little1')
 
 
-def hand_frame(arm, names):
-    """Hệ trục trực chuẩn của bàn tay: dọc lòng bàn tay, ngang lòng bàn tay."""
+def local_frame(arm, names):
+    """Hệ trục trực chuẩn dựng từ bốn khớp: gốc, hướng dọc, và một cặp làm
+    hướng ngang. Dùng giải phẫu chứ không lấy hướng xương lúc nghỉ — hai rig đặt
+    xương lúc nghỉ khác nhau, lấy hướng ấy thì đồ cầm tay xoay ngang."""
     hand, mid, idx, pky = names
     w = arm.matrix_world
     p = w @ arm.data.bones[hand].head_local
@@ -101,6 +103,16 @@ def hand_frame(arm, names):
                    (0.0, 0.0, 0.0, 1.0)))
 
 
+QUIVER_MESH = 'arrow_box'
+# Ống tên skin vào ba xương thân, nặng nhất là Spine2 (87% trọng số). Gắn cứng
+# vào một xương duy nhất là đủ: nó vốn gần như không biến dạng.
+QUIVER_ANCHOR_SRC = M + 'Spine2'
+QUIVER_ANCHOR_DST = 'J_Bip_C_UpperChest'
+TORSO_SRC = (M + 'Spine2', M + 'Neck', M + 'LeftArm', M + 'RightArm')
+TORSO_DST = ('J_Bip_C_UpperChest', 'J_Bip_C_Neck',
+             'J_Bip_L_UpperArm', 'J_Bip_R_UpperArm')
+
+
 def rig_height(arm, hips, head):
     w = arm.matrix_world
     return ((w @ arm.data.bones[head].head_local)
@@ -113,14 +125,14 @@ def attach_bow(idol_arm, src_arm, archer_objs):
                 if o.type == 'MESH' and o.name.startswith(BOW_MESH)), None)
     if bow is None:
         print('    KHÔNG tìm thấy lưới cung')
-        return []
+        return [], 1.0
 
     s = (rig_height(idol_arm, 'J_Bip_C_Hips', 'J_Bip_C_Head')
          / rig_height(src_arm, M + 'Hips', M + 'Head'))
     # Một phép đồng dạng đưa cả vùng bàn tay nguồn về vùng bàn tay đích. Đặt
     # xương VÀ lưới bằng đúng phép này thì thế bind không đổi, skin giữ nguyên.
-    t = (hand_frame(idol_arm, HAND_DST) @ Matrix.Scale(s, 4)
-         @ hand_frame(src_arm, HAND_SRC).inverted())
+    t = (local_frame(idol_arm, HAND_DST) @ Matrix.Scale(s, 4)
+         @ local_frame(src_arm, HAND_SRC).inverted())
     print('    cung: tỉ lệ %.3f theo chiều cao rig' % s)
 
     ws = src_arm.matrix_world
@@ -158,7 +170,52 @@ def attach_bow(idol_arm, src_arm, archer_objs):
         if m.type == 'ARMATURE':
             m.object = idol_arm
     print('    cung: gắn %d xương vào J_Bip_L_Hand' % len(made))
-    return made
+    return made, s
+
+
+def attach_quiver(idol_arm, src_arm, archer_objs, scale):
+    """Chuyển ống tên sang lưng cô ca sĩ, gắn cứng vào một xương ngực."""
+    q = next((o for o in archer_objs
+              if o.type == 'MESH' and o.name.startswith(QUIVER_MESH)), None)
+    if q is None:
+        print('    KHÔNG tìm thấy lưới ống tên')
+        return None
+
+    t = (local_frame(idol_arm, TORSO_DST) @ Matrix.Scale(scale, 4)
+         @ local_frame(src_arm, TORSO_SRC).inverted())
+
+    ws = src_arm.matrix_world
+    b = src_arm.data.bones[QUIVER_ANCHOR_SRC]
+    head = t @ (ws @ b.head_local)
+    tail = t @ (ws @ b.tail_local)
+    roll = (t.to_3x3() @ ((ws @ b.matrix_local).to_3x3()
+                          @ Vector((0.0, 0.0, 1.0)))).normalized()
+
+    bpy.context.view_layer.objects.active = idol_arm
+    bpy.ops.object.mode_set(mode='EDIT')
+    eb = idol_arm.data.edit_bones
+    nb = eb.new('Quiver')
+    nb.head, nb.tail = head, tail
+    nb.align_roll(roll)
+    nb.parent = eb[QUIVER_ANCHOR_DST]
+    nb.use_connect = False
+    name = nb.name
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    for vg in list(q.vertex_groups):
+        q.vertex_groups.remove(vg)
+    g = q.vertex_groups.new(name=name)
+    g.add(list(range(len(q.data.vertices))), 1.0, 'REPLACE')
+
+    mw = t @ q.matrix_world
+    q.parent = idol_arm
+    q.matrix_parent_inverse = idol_arm.matrix_world.inverted()
+    q.matrix_world = mw
+    for m in q.modifiers:
+        if m.type == 'ARMATURE':
+            m.object = idol_arm
+    print('    ống tên: gắn cứng vào %s' % QUIVER_ANCHOR_DST)
+    return name
 
 
 def copy_bow_motion(idol_arm, src_arm, clip_names, bow_bones):
@@ -265,10 +322,11 @@ def main():
             lock=act.name in LOCK_FEET)
         made.append(new.name)
 
-    print('>>> Gắn cung vào tay cô ca sĩ')
-    bow_bones = attach_bow(idol_arm, src_arm, archer_objs)
+    print('>>> Gắn cung và ống tên')
+    bow_bones, scale = attach_bow(idol_arm, src_arm, archer_objs)
     if bow_bones:
         copy_bow_motion(idol_arm, src_arm, made, bow_bones)
+    attach_quiver(idol_arm, src_arm, archer_objs, scale)
 
     # Đẩy lên NLA: bộ xuất glTF chỉ lấy hoạt ảnh từ strip.
     ad = idol_arm.animation_data
@@ -281,8 +339,9 @@ def main():
         track.strips.new(name, 1, bpy.data.actions[name])
 
     for o in archer_objs:                 # chỉ mượn động tác, không lấy hình
-        if o.type == 'MESH' and o.name.startswith(BOW_MESH):
-            continue                      # trừ cây cung, đã sang tay cô ca sĩ
+        if o.type == 'MESH' and (o.name.startswith(BOW_MESH)
+                                 or o.name.startswith(QUIVER_MESH)):
+            continue                      # trừ cung và ống tên, đã sang rồi
         bpy.data.objects.remove(o, do_unlink=True)
 
     # Xoá luôn action gốc của cung thủ. Xoá đối tượng thôi chưa đủ: action vẫn

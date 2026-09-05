@@ -222,6 +222,18 @@ table.rig td.arr { color: var(--muted); padding: 3px 6px; }
     </div>
 
     <div class="card">
+      <h2>Chiều cao</h2>
+      <div class="btns">
+        <button id="btn-even" class="on">Cân bằng nhau</button>
+        <button id="btn-true">Tỉ lệ thật</button>
+      </div>
+      <p style="margin:9px 0 0;font-size:11.5px;color:var(--muted)" id="ratio-note">
+        Đo bằng cao độ khớp đầu, không dùng hộp bao — cây cung chìa lên quá đỉnh
+        đầu thì hộp bao đo ra chiều cao của cung.
+      </p>
+    </div>
+
+    <div class="card">
       <h2>Hiện ai</h2>
       <div class="btns">
         <button id="btn-both" class="on">Cả hai</button>
@@ -257,8 +269,8 @@ table.rig td.arr { color: var(--muted); padding: 3px 6px; }
         <dt>clip chuyển được</dt><dd>5 / 5</dd>
         <dt>tổng số khung</dt><dd>198</dd>
         <dt>khoá bàn chân</dt><dd>172 lượt</dd>
-        <dt>trục ghim thêm</dt><dd>4</dd>
-        <dt>GLB nén Draco</dt><dd>4,52 MB</dd>
+        <dt>trục ghim thêm</dt><dd>5</dd>
+        <dt>GLB nén Draco</dt><dd>4,53 MB</dd>
       </dl>
     </div>
   </div>
@@ -317,7 +329,17 @@ table.rig td.arr { color: var(--muted); padding: 3px 6px; }
       xương và lưới bằng đúng phép ấy nên thế bind không đổi, skin giữ nguyên.
       Riêng chuỗi xương cung thì chép thẳng góc xoay cục bộ được — chúng là bản
       sao đồng dạng, cùng tư thế nghỉ — nhờ vậy cung vẫn nhún theo lúc giương.
-      Mũi tên và ống tên thì không mang sang.</li>
+      Ống tên mang sang theo cách khác: nó skin vào ba xương thân, nặng nhất là
+      Spine2 với <span class="num">87%</span> trọng số, nên gắn cứng vào một
+      xương ngực là đủ — hệ trục thân dựng từ đốt sống và đường nối hai vai.</li>
+
+      <li><b>Đầu vẫn quay ngang sau lần sửa đầu tiên.</b> Đo trên file đã xuất
+      thì lệch đúng <span class="num">0°</span> — phép căn chạy đúng như tôi bảo,
+      mà tôi bảo sai. <code>rotation_difference</code> chỉ cho phần <i>lắc</i>,
+      bỏ mất phần xoay <i>quanh</i> chính trục nhìn; mà vector khớp-đầu→giữa-hai-mắt
+      dựng đứng tới <span class="num">71°</span>, nên cái bị bỏ chính là góc quay
+      trái–phải của đầu — hệt lỗi xương chậu. Ghim nốt bằng đường nối hai mắt:
+      trục này nằm ngang và có nghĩa như nhau ở cả hai rig nên không cần trừ gì.</li>
     </ol>
   </section>
 </div>
@@ -390,10 +412,15 @@ function loadOne(url, who, x) {
       clips.set(c.name.replace(/^mimic_/, ''), c);
     }
     // Xương gốc của rig, để khử phương ngang khi chạy tại chỗ.
-    let hips = null;
-    root.traverse(o => { if (!hips && /Hips$/.test(o.name)) hips = o; });
+    let hips = null, head = null;
+    root.traverse(o => {
+      if (!hips && /Hips$/.test(o.name)) hips = o;
+      if (!head && /Head$/.test(o.name)) head = o;
+    });
     root.updateMatrixWorld(true);
-    side[who] = { root, mixer, clips, hips, place: new Map(), action: null };
+    const tall = head
+      ? new THREE.Vector3().setFromMatrixPosition(head.matrixWorld).y : 0;
+    side[who] = { root, mixer, clips, hips, tall, place: new Map(), action: null };
     res(side[who]);
   }, undefined, rej));
 }
@@ -408,6 +435,8 @@ Promise.all([
     side.archer.face = side.archer.clips.get(face);
     side.archer.mixer.clipAction(side.archer.face).play();
   }
+
+  setEven(true);
 
   const box = new THREE.Box3();
   for (const w of ['archer', 'idol']) box.union(new THREE.Box3().setFromObject(side[w].root));
@@ -496,6 +525,26 @@ function setPlace(on) {
   }
   if (current) play(current, null);
 }
+// Cô ca sĩ thấp hơn Erika; phóng cô ấy lên cho hai người ngang nhau thì so
+// tư thế dễ hơn nhiều. Đo bằng cao độ khớp đầu chứ không dùng hộp bao — cung
+// chìa lên quá đỉnh đầu, hộp bao sẽ đo ra chiều cao của cung.
+function setEven(on) {
+  document.getElementById('btn-even').classList.toggle('on', on);
+  document.getElementById('btn-true').classList.toggle('on', !on);
+  if (!side.archer || !side.idol) return;
+  const k = (on && side.idol.tall > 0) ? side.archer.tall / side.idol.tall : 1;
+  side.idol.root.scale.setScalar(k);
+  document.getElementById('ratio-note').textContent = on
+    ? 'Cô ca sĩ được phóng ×' + k.toFixed(2).replace('.', ',')
+      + ' cho ngang tầm Erika. Đo bằng cao độ khớp đầu, không dùng hộp bao —'
+      + ' cây cung chìa lên quá đỉnh đầu thì hộp bao đo ra chiều cao của cung.'
+    : 'Đúng tỉ lệ gốc: khớp đầu cô ca sĩ ở '
+      + side.idol.tall.toFixed(2).replace('.', ',') + ' m, Erika ở '
+      + side.archer.tall.toFixed(2).replace('.', ',') + ' m.';
+}
+document.getElementById('btn-even').addEventListener('click', () => setEven(true));
+document.getElementById('btn-true').addEventListener('click', () => setEven(false));
+
 document.getElementById('btn-place').addEventListener('click', () => setPlace(true));
 document.getElementById('btn-free').addEventListener('click', () => setPlace(false));
 
