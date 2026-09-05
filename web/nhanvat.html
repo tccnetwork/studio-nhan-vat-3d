@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bốn Nhân Vật</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --ground:  #EEECE7;
+  --panel:   #FFFFFF;
+  --line:    #CFCCC5;
+  --text:    #22242A;
+  --muted:   #5E626A;
+  --tile-a:  #DEDCD7;
+  --tile-b:  #C4C7C9;
+  --idol:    #B4577A;
+  --archer:  #5C6B45;
+  --knight:  #A63A46;
+  --male:    #2F6F8F;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:  #121316;
+    --panel:   #1B1D22;
+    --line:    #31343B;
+    --text:    #E5E4E0;
+    --muted:   #979CA5;
+    --tile-a:  #1E2126;
+    --tile-b:  #101216;
+    --idol:    #D2789A;
+    --archer:  #93A876;
+    --knight:  #C95563;
+    --male:    #6BB2CF;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:  #121316;
+  --panel:   #1B1D22;
+  --line:    #31343B;
+  --text:    #E5E4E0;
+  --muted:   #979CA5;
+  --tile-a:  #1E2126;
+  --tile-b:  #101216;
+  --idol:    #D2789A;
+  --archer:  #93A876;
+  --knight:  #C95563;
+  --male:    #6BB2CF;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ground); color: var(--text);
+  font: 400 14px/1.55 "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 26px 20px 40px; }
+h1 {
+  font-family: Spectral, Georgia, serif; font-weight: 600;
+  font-size: clamp(27px, 4.2vw, 40px); letter-spacing: -0.01em;
+  margin: 0 0 6px; text-wrap: balance;
+}
+h1 em { font-style: italic; font-weight: 400; color: var(--muted); }
+.sub { margin: 0 0 26px; color: var(--muted); max-width: 66ch; }
+
+.grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(238px, 1fr));
+  gap: 18px;
+}
+.card {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  background: var(--panel); text-decoration: none; color: inherit;
+  transition: border-color .14s, transform .14s;
+}
+.card:hover { border-color: var(--c); transform: translateY(-2px); }
+.card:focus-visible { outline: 2px solid var(--c); outline-offset: 3px; }
+.shot {
+  aspect-ratio: 520 / 700;
+  background: linear-gradient(180deg, var(--tile-a), var(--tile-b));
+  display: grid; place-items: center;
+}
+.shot img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.body { padding: 13px 15px 16px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.name { font: 600 15.5px/1.25 "IBM Plex Sans", sans-serif; }
+.name b { color: var(--c); font-weight: 600; }
+.what { color: var(--muted); font-size: 12.8px; margin: 0; flex: 1; }
+dl {
+  margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 3px 10px;
+  font: 400 11.5px/1.45 "IBM Plex Mono", monospace;
+}
+dl dt { color: var(--muted); }
+dl dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.go {
+  margin-top: 2px; font: 500 12px/1 "IBM Plex Mono", monospace;
+  color: var(--c); letter-spacing: .02em;
+}
+
+.extra { margin-top: 26px; }
+.extra h2 {
+  font: 600 11px/1 "IBM Plex Sans", sans-serif; letter-spacing: .10em;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 10px;
+}
+.rows { display: grid; gap: 10px; }
+.row {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  border: 1px solid var(--line); border-radius: 10px; padding: 12px 15px;
+  background: var(--panel); text-decoration: none; color: inherit;
+  transition: border-color .14s;
+}
+.row:hover { border-color: var(--idol); }
+.row b { font-weight: 600; }
+.row span { color: var(--muted); font-size: 12.8px; }
+.row code {
+  font: 400 11.5px/1 "IBM Plex Mono", monospace; color: var(--muted);
+  margin-left: auto;
+}
+footer {
+  margin-top: 28px; color: var(--muted); font-size: 12px;
+  border-top: 1px solid var(--line); padding-top: 14px;
+}
+footer code { font-family: "IBM Plex Mono", monospace; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Bốn Nhân Vật <em>— tất cả trình xem</em></h1>
+  <p class="sub">Mọi nhân vật trong dự án, mỗi người một trang xem riêng chạy thẳng
+  trên trình duyệt. Bấm vào ảnh để mở. Tất cả đều dựng bằng Blender headless và
+  xem bằng three.js, không có bước nào phải mở giao diện Blender.</p>
+
+  <div class="grid">
+    <a class="card" style="--c:var(--idol)" href="./">
+      <div class="shot"><img src="thumbs/ca_si.png" alt="Cô ca sĩ anime idol"></div>
+      <div class="body">
+        <div class="name">Cô ca sĩ <b>anime idol</b></div>
+        <p class="what">Nhân vật gốc của dự án. Hát nhép theo file MP3 tự tải lên,
+        tóc có vật lý, tự ghép động tác thành bài nhảy.</p>
+        <dl>
+          <dt>xương</dt><dd>154</dd>
+          <dt>khẩu hình</dt><dd>57</dd>
+          <dt>trạng thái</dt><dd>19</dd>
+        </dl>
+        <div class="go">mở studio →</div>
+      </div>
+    </a>
+
+    <a class="card" style="--c:var(--archer)" href="char6.html">
+      <div class="shot"><img src="thumbs/cung_thu.png" alt="Cung thủ Erika"></div>
+      <div class="body">
+        <div class="name">Cung thủ <b>Erika</b></div>
+        <p class="what">Chín texture của file gốc đều không tồn tại — toàn bộ màu ở
+        đây là dựng mới. Mũi tên bay khi bắn, chớp mắt và mỉm cười nặn từ hình học.</p>
+        <dl>
+          <dt>xương</dt><dd>87</dd>
+          <dt>clip</dt><dd>7 → 5</dd>
+          <dt>GLB</dt><dd>0,87 MB</dd>
+        </dl>
+        <div class="go">mở trang →</div>
+      </div>
+    </a>
+
+    <a class="card" style="--c:var(--knight)" href="char4.html">
+      <div class="shot"><img src="thumbs/hiep_si.png" alt="Hiệp sĩ thập tự"></div>
+      <div class="body">
+        <div class="name">Hiệp sĩ <b>thập tự</b></div>
+        <p class="what">Gộp ba file thành một. Chữ thập trên khiên vẽ bằng hình học.
+        Cởi được bốn món trang bị, dưới mũ trụ có sẵn một khuôn mặt đầy đủ.</p>
+        <dl>
+          <dt>xương</dt><dd>86</dd>
+          <dt>clip</dt><dd>18 → 6</dd>
+          <dt>GLB</dt><dd>0,81 MB</dd>
+        </dl>
+        <div class="go">mở trang →</div>
+      </div>
+    </a>
+
+    <a class="card" style="--c:var(--male)" href="idol_male.html">
+      <div class="shot"><img src="thumbs/nam.png" alt="Nhân vật nam"></div>
+      <div class="body">
+        <div class="name">Nhân vật <b>nam</b></div>
+        <p class="what">Nắn từ chính rig của cô ca sĩ: vai rộng thêm 22%, hông thu
+        6%, đầu nhỏ lại cho ra tỉ lệ người lớn. Mượn sáu động tác của hiệp sĩ.</p>
+        <dl>
+          <dt>xương</dt><dd>154</dd>
+          <dt>ngực ÷ hông</dt><dd>1,05 → 1,30</dd>
+          <dt>cao</dt><dd>1,66 m</dd>
+        </dl>
+        <div class="go">mở trang →</div>
+      </div>
+    </a>
+  </div>
+
+  <section class="extra">
+    <h2>Trang phụ</h2>
+    <div class="rows">
+      <a class="row" href="idol_mimic.html">
+        <b>Cô ca sĩ học nghề</b>
+        <span>Diễn lại 11 động tác của cung thủ và hiệp sĩ, kèm cung, ống tên,
+        kiếm, khiên. Hai người đứng cạnh nhau cùng một mốc thời gian.</span>
+        <code>idol_mimic.html</code>
+      </a>
+      <a class="row" href="idol_mimic.html?nguon=kiemsi">
+        <b>— mở thẳng bộ hiệp sĩ</b>
+        <span>Cùng trang trên, vào sẵn nguồn động tác của hiệp sĩ.</span>
+        <code>?nguon=kiemsi</code>
+      </a>
+      <a class="row" href="embed-demo.html">
+        <b>Bản nhúng</b>
+        <span>Cô ca sĩ nhúng vào một trang khác qua <code>embed.js</code>.</span>
+        <code>embed-demo.html</code>
+      </a>
+    </div>
+  </section>
+
+  <footer>
+    Dựng lại bất cứ nhân vật nào: <code>scripts/build_*.py</code> chạy bằng Blender
+    headless. Model nguồn nằm ngoài repo — xem phần “Bắt đầu” trong
+    <code>README.md</code>.
+  </footer>
+</div>
+</body>
+</html>
