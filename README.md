@@ -4,13 +4,14 @@ Quy trình dựng nhân vật 3D cho web, chạy hoàn toàn bằng Blender head
 three.js. Không có bước nào phải mở giao diện Blender: mọi thứ là script, dựng
 lại lúc nào cũng ra đúng kết quả cũ.
 
-Trong repo có **ba nhân vật**, mỗi nhân vật một trình xem riêng:
+Trong repo có **bốn nhân vật**, mỗi nhân vật một trình xem riêng:
 
 | nhân vật | nguồn | dựng bằng | trang xem |
 |---|---|---|---|
 | Cô ca sĩ anime idol | VRoid Studio, 154 xương, 57 blendshape | `scripts/build_character.py` | `web/` |
 | Cung thủ Erika | `char6.fbx`, rig Mixamo 87 xương | `scripts/build_char6.py` | `web/char6.html` |
 | Hiệp sĩ thập tự | ba file `char4*.fbx`, rig Mixamo 86 xương | `scripts/build_char4.py` | `web/char4.html` |
+| Nhân vật nam | nắn từ chính rig của cô ca sĩ | `scripts/build_idol_male.py` | `web/idol_male.html` |
 
 Cộng thêm một trang thứ tư, `web/idol_mimic.html`, cho cô ca sĩ diễn lại **11
 động tác của cả hai nhân vật Mixamo** — kèm theo cả đồ nghề: cung, ống tên,
@@ -68,6 +69,10 @@ $BL --background --factory-startup --python scripts/build_char4.py
 $BL --background --factory-startup --python scripts/build_idol_mimic.py -- cungthu
 $BL --background --factory-startup --python scripts/build_idol_mimic.py -- kiemsi
 
+# nhân vật nam nắn từ rig cô ca sĩ, rồi mượn động tác của hiệp sĩ
+$BL --background --factory-startup --python scripts/build_idol_male.py
+$BL --background --factory-startup --python scripts/build_idol_mimic.py -- kiemsi nam
+
 # rồi mở trình xem
 python3 -m http.server 8080
 ```
@@ -79,6 +84,7 @@ python3 -m http.server 8080
 | hiệp sĩ thập tự | `http://localhost:8080/web/char4.html` |
 | cô ca sĩ bắt chước | `http://localhost:8080/web/idol_mimic.html` |
 | — mở thẳng bộ hiệp sĩ | `…/web/idol_mimic.html?nguon=kiemsi` |
+| nhân vật nam | `http://localhost:8080/web/idol_male.html` |
 
 ## Bốn bài học đắt nhất
 
@@ -150,10 +156,41 @@ Chữ thập trên khiên vẽ bằng hình học vì không có texture nào đ
 lấy bằng phân tích trục chính, chiều pháp tuyến hỏi xương cầm, đầu phình là đầu
 trên. Bốn món trang bị tháo được từ trang web — mũ trụ, khiên, kiếm, váy giáp.
 
+### Nắn thành nhân vật nam — `scripts/build_idol_male.py`
+
+Cùng bộ xương 154 khớp và 58 khẩu hình của cô ca sĩ, chỉ đổi tỉ lệ người: vai
+rộng thêm 22%, hông thu 6%, cao thêm 6,6 cm. Tỉ lệ ngực trên hông đi từ 1,05
+lên 1,30 — bản gốc có ngực và hông gần bằng nhau, đó là dấu hiệu dáng nữ rõ
+nhất trong số đo.
+
+Sửa lưới thôi là hỏng phép skin: ma trận bind vẫn tính theo hình cũ nên hễ vào
+tư thế là lưới trượt khỏi xương. Ở đây mọi phép nắn là MỘT hàm biến đổi điểm,
+áp cho cả đỉnh lưới lẫn head/tail của xương trong tư thế nghỉ. Chuyển được sáu
+động tác của hiệp sĩ lên anh ta chính là phép kiểm cho việc đó:
+
+```bash
+$BL --background --factory-startup --python scripts/build_idol_mimic.py -- kiemsi nam
+```
+
+Không warp được theo cao độ, vì rig VRoid ở tư thế chữ T: hai cánh tay nằm
+ngang ở z≈1,27 và vươn tới x=±0,70, nên một phép co giãn X phụ thuộc z sẽ kéo
+dài cánh tay thay vì nới vai. Mọi phép nắn đều đi kèm mặt nạ trọng số xương —
+tổng trọng số của nhóm xương liên quan tại đỉnh đó, một trường liên tục nên
+không để lại đường nối.
+
+Hai cái bẫy riêng của khẩu hình. Thứ nhất, `Fcl_MTH_Close` KHÔNG khép được
+miệng: đo ra nó chỉ dịch đỉnh miệng tối đa 0,67 mm, vì cái miệng hé lộ lưỡi nằm
+sẵn trong hình nền của VRoid. Phải khép bằng hình học, và nén cả vùng chứ không
+riêng lưới trong miệng — lưới da có lỗ ở chỗ ấy, thu mỗi phần trong thì hở ra
+nhìn thấu vào trong đầu. Thứ hai, khẩu hình glTF lưu TOẠ ĐỘ TUYỆT ĐỐI của toàn
+bộ đỉnh, nên mọi phép nắn phải áp cho cả 58 khẩu hình; bỏ qua là hễ chớp mắt,
+khuôn mặt lại bật về hình nữ cũ.
+
 ### Chuyển động tác giữa hai rig — `scripts/build_idol_mimic.py`
 
-Một script, hai nguồn: `-- cungthu` lấy động tác của Erika, `-- kiemsi` lấy của
-hiệp sĩ. Cùng bảng ánh xạ xương, cùng phép ghim trục thứ hai, cùng cách mang đồ
+Một script, hai nguồn và hai đích: `-- cungthu` lấy động tác của Erika,
+`-- kiemsi` lấy của hiệp sĩ; tham số thứ hai `nu` (mặc định) hay `nam` chọn
+nhân vật nhận. Cùng bảng ánh xạ xương, cùng phép ghim trục thứ hai, cùng cách mang đồ
 cầm tay sang — khác nhau chỉ ở bảng `SOURCES`: file nguồn, mốc tại chỗ của từng
 clip, và món nào cầm ở tay nào.
 

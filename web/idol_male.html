@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nhân Vật Nam Mới</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --accent:  #2F6F8F;
+  --ground:  #EDEDEA;
+  --panel:   #FFFFFFEE;
+  --line:    #C8C7C2;
+  --text:    #212327;
+  --muted:   #5C6067;
+  --stage-a: #DAD9D5;
+  --stage-b: #B9BDBF;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --accent:  #6BB2CF;
+    --ground:  #121417;
+    --panel:   #1C1F24EE;
+    --line:    #323740;
+    --text:    #E4E4E0;
+    --muted:   #989DA6;
+    --stage-a: #191C20;
+    --stage-b: #0C0E11;
+  }
+}
+:root[data-theme="dark"] {
+  --accent:  #6BB2CF;
+  --ground:  #121417;
+  --panel:   #1C1F24EE;
+  --line:    #323740;
+  --text:    #E4E4E0;
+  --muted:   #989DA6;
+  --stage-a: #191C20;
+  --stage-b: #0C0E11;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ground); color: var(--text);
+  font: 400 14px/1.55 "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+.wrap {
+  display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px;
+  max-width: 1180px; margin: 0 auto; padding: 22px 20px 30px;
+}
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); } }
+header { grid-column: 1 / -1; }
+h1 {
+  font-family: Spectral, Georgia, serif; font-weight: 600;
+  font-size: clamp(26px, 4vw, 38px); letter-spacing: -0.01em;
+  margin: 0 0 4px; text-wrap: balance;
+}
+h1 em { font-style: italic; font-weight: 400; color: var(--accent); }
+.sub { margin: 0; color: var(--muted); max-width: 64ch; }
+#stage {
+  position: relative; border: 1px solid var(--line); border-radius: 10px;
+  overflow: hidden; background: linear-gradient(180deg, var(--stage-a), var(--stage-b));
+  aspect-ratio: 4 / 5; min-height: 400px;
+}
+#stage canvas { display: block; width: 100%; height: 100%; }
+.pill {
+  position: absolute;
+  font: 400 11.5px/1 "IBM Plex Mono", ui-monospace, monospace;
+  color: var(--muted); background: var(--panel); padding: 6px 9px;
+  border-radius: 5px; border: 1px solid var(--line);
+}
+#hint  { left: 12px; bottom: 10px; }
+#clock { right: 12px; bottom: 10px; font-variant-numeric: tabular-nums; }
+#loading {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--muted);
+}
+.rail { display: flex; flex-direction: column; gap: 16px; }
+.card {
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 13px 14px 15px; background: var(--panel);
+}
+.card h2 {
+  font: 600 11px/1 "IBM Plex Sans", sans-serif; letter-spacing: .10em;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 10px;
+}
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+button {
+  font: 500 12.5px/1 "IBM Plex Sans", sans-serif; color: var(--text);
+  background: transparent; border: 1px solid var(--line); border-radius: 6px;
+  padding: 7px 10px; cursor: pointer; transition: background .12s, border-color .12s;
+}
+button:hover { border-color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.on { background: var(--accent); border-color: var(--accent); color: #F2F8FB; }
+.speed { display: flex; align-items: center; gap: 9px; margin-top: 10px; }
+.speed input { flex: 1; accent-color: var(--accent); }
+.speed span {
+  font: 500 12px/1 "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums;
+  color: var(--muted); min-width: 34px; text-align: right;
+}
+table.cmp { width: 100%; border-collapse: collapse; font: 400 12px/1.5 "IBM Plex Mono", monospace; }
+table.cmp th {
+  text-align: right; font-weight: 500; color: var(--muted);
+  padding: 0 0 5px; border-bottom: 1px solid var(--line);
+}
+table.cmp th:first-child { text-align: left; }
+table.cmp td { padding: 4px 0; text-align: right; font-variant-numeric: tabular-nums; }
+table.cmp td:first-child { text-align: left; color: var(--muted); font-family: "IBM Plex Sans", sans-serif; font-size: 12.5px; }
+table.cmp td.new { color: var(--accent); }
+.notes { grid-column: 1 / -1; }
+.notes ol { margin: 0; padding-left: 1.15em; max-width: 78ch; }
+.notes li { margin-bottom: 9px; color: var(--muted); }
+.notes li b { color: var(--text); font-weight: 600; }
+.notes code {
+  font: 400 12px/1 "IBM Plex Mono", monospace;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  padding: 1px 4px; border-radius: 3px; color: var(--text);
+}
+.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Nhân Vật Nam Mới <em>— nắn từ rig của cô ca sĩ</em></h1>
+    <p class="sub">Cùng một bộ xương <span class="num">154</span> khớp, cùng
+    <span class="num">58</span> khẩu hình, nhưng tỉ lệ người đã khác: vai rộng thêm
+    <span class="num">22%</span>, hông thu <span class="num">6%</span>, cao thêm
+    <span class="num">6,6</span> cm. Anh ta diễn được luôn sáu động tác của hiệp sĩ —
+    đó cũng chính là phép kiểm rằng nắn dáng không làm hỏng phép skin.</p>
+  </header>
+
+  <div id="stage">
+    <div id="loading">đang tải mô hình…</div>
+    <div class="pill" id="hint">kéo · xoay &nbsp;|&nbsp; cuộn · phóng</div>
+    <div class="pill" id="clock">—</div>
+  </div>
+
+  <div class="rail">
+    <div class="card">
+      <h2>Động tác</h2>
+      <div class="btns" id="clips"></div>
+      <div class="speed">
+        <input id="rate" type="range" min="10" max="150" value="100" aria-label="Tốc độ phát">
+        <span id="rate-out">1,00×</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>So với bản gốc</h2>
+      <div class="btns">
+        <button id="btn-solo" class="on">Chỉ nhân vật mới</button>
+        <button id="btn-pair">Đứng cạnh bản gốc</button>
+      </div>
+      <p style="margin:9px 0 0;font-size:11.5px;color:var(--muted)">
+        Bản gốc đứng chữ T vì file nguồn không kèm hoạt ảnh nào — nó chỉ ở đây để
+        so tỉ lệ.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Số đo</h2>
+      <table class="cmp">
+        <tr><th>&nbsp;</th><th>gốc</th><th>mới</th></tr>
+        <tr><td>chiều cao</td><td>1,598</td><td class="new">1,664</td></tr>
+        <tr><td>khớp đầu</td><td>1,386</td><td class="new">1,449</td></tr>
+        <tr><td>ngang ngực</td><td>0,343</td><td class="new">0,399</td></tr>
+        <tr><td>ngang hông</td><td>0,326</td><td class="new">0,308</td></tr>
+        <tr><td>nửa vai</td><td>0,109</td><td class="new">0,133</td></tr>
+        <tr><td>ngực ÷ hông</td><td>1,05</td><td class="new">1,30</td></tr>
+      </table>
+      <p style="margin:9px 0 0;font-size:11.5px;color:var(--muted)">
+        Đơn vị mét. Bản gốc có ngực và hông gần bằng nhau — đó là dấu hiệu dáng nữ
+        rõ nhất trong số đo.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Đã đổi những gì</h2>
+      <table class="cmp">
+        <tr><td>vai</td><td colspan="2" class="new">đẩy ra 24 mm mỗi bên</td></tr>
+        <tr><td>lồng ngực</td><td colspan="2" class="new">nở ngang ×1,17</td></tr>
+        <tr><td>ngực</td><td colspan="2" class="new">phẳng, lùi 26 mm</td></tr>
+        <tr><td>hông</td><td colspan="2" class="new">thu ×0,90</td></tr>
+        <tr><td>cổ</td><td colspan="2" class="new">dày ×1,16</td></tr>
+        <tr><td>tay</td><td colspan="2" class="new">dày ×1,12</td></tr>
+        <tr><td>mắt</td><td colspan="2" class="new">ngang ×0,90 dọc ×0,76</td></tr>
+        <tr><td>quai hàm</td><td colspan="2" class="new">bạnh ×1,08</td></tr>
+        <tr><td>miệng</td><td colspan="2" class="new">khép còn 30%</td></tr>
+        <tr><td>tóc</td><td colspan="2" class="new">cắt ngắn trên tai</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <section class="notes card">
+    <h2>Bốn chỗ phải gỡ</h2>
+    <ol>
+      <li><b>Sửa lưới thôi là hỏng phép skin.</b> Ma trận bind vẫn tính theo hình
+      cũ, nên hễ vào tư thế là lưới trượt khỏi xương. Ở đây mọi phép nắn là
+      <i>một</i> hàm biến đổi điểm, và hàm ấy áp cho cả đỉnh lưới lẫn head/tail
+      của xương trong tư thế nghỉ. Bind đổi theo nên skin giữ nguyên — chuyển được
+      sáu động tác của hiệp sĩ lên anh ta chính là phép kiểm cho việc đó.</li>
+
+      <li><b>Không warp được theo cao độ.</b> Rig VRoid ở tư thế chữ T: hai cánh
+      tay nằm ngang ở <span class="num">z≈1,27</span>, vươn tới
+      <span class="num">x=±0,70</span>. Một phép co giãn X phụ thuộc z sẽ kéo dài
+      cánh tay thay vì nới vai. Nên mọi phép nắn đều đi kèm <b>mặt nạ trọng số
+      xương</b> — tổng trọng số của nhóm xương liên quan tại đỉnh đó. Mặt nạ là
+      trường liên tục nên không để lại đường nối, còn phép đẩy vai ra ngoài là
+      tịnh tiến thuần nên cánh tay không biến dạng chút nào.</li>
+
+      <li><b>Khẩu hình <code>MTH_Close</code> không khép được miệng.</b> Mặc định
+      của VRoid là miệng hé lộ cả lưỡi, và tôi tưởng đó là một trạng thái mở mà
+      khẩu hình ấy đóng lại được. Đo ra nó chỉ dịch đỉnh miệng tối đa
+      <span class="num">0,67</span> mm, trung bình <span class="num">0,02</span> mm
+      — cái miệng hé nằm sẵn trong hình nền. Phải khép bằng hình học: nén cả vùng
+      miệng theo chiều dọc còn <span class="num">30%</span>, và nén CẢ vùng chứ
+      không riêng lưới trong miệng, vì lưới da có lỗ ở chỗ ấy — thu mỗi phần trong
+      thì hở ra nhìn thấu vào trong đầu.</li>
+
+      <li><b>Khẩu hình lưu toạ độ tuyệt đối.</b> Mọi phép nắn phải áp cho cả
+      <span class="num">58</span> khẩu hình, không riêng lưới nền. Bỏ qua là hễ
+      chớp mắt hay mở miệng, khuôn mặt lại bật về hình nữ cũ — vì khẩu hình glTF
+      không lưu độ lệch mà lưu vị trí đầy đủ của toàn bộ đỉnh.</li>
+    </ol>
+  </section>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+const MALE = '../build/idol_male/male_idol_knight.glb';
+const BASE = '../source/female_singer_anime_idol_base.glb';
+const NICE = { '01_ThuThe': '🛡 Thủ thế', '02_DiBo': 'Đi bộ',
+               '03_GucNga': '💀 Gục ngã', '04_ChemNgang': '⚔️ Chém ngang',
+               '05_NhayChem': '🌀 Nhảy chém', '06_DamThang': '🗡️ Đâm thẳng' };
+
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(36, 1, 0.05, 60);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.enablePan = false;
+controls.minDistance = 1.2;
+controls.maxDistance = 9;
+
+// Từ r155 three.js tính ánh sáng theo đơn vị vật lý, hệ số PI nhân ngầm trước
+// đây đã bị bỏ — phải nhân lại, không thì cảnh tối hơn ~3,14 lần.
+const L = Math.PI;
+const key = new THREE.DirectionalLight(0xfff3e6, 2.1 * L);
+key.position.set(2.4, 3.0, 2.6); scene.add(key);
+const fill = new THREE.DirectionalLight(0xd8e4ff, 0.8 * L);
+fill.position.set(-2.6, 1.4, 1.8); scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffffff, 1.2 * L);
+rim.position.set(-0.4, 2.2, -3.2); scene.add(rim);
+scene.add(new THREE.HemisphereLight(0xc2d2e6, 0x2a2a24, 0.7 * L));
+
+const draco = new DRACOLoader();
+draco.setDecoderPath('vendor/draco/');
+const loader = new GLTFLoader();
+loader.setDRACOLoader(draco);
+
+let mixer = null, current = null, rate = 1.0, base = null, paired = false;
+const clockEl = document.getElementById('clock');
+
+function drop(root) {
+  // Bộ nhập glTF của Blender để lại một Icosphere 2 m trong cảnh; nó không
+  // thuộc nhân vật nào và làm hộp bao phình ra gấp đôi.
+  const junk = [];
+  root.traverse(o => { if (/^Icosphere/.test(o.name)) junk.push(o); });
+  junk.forEach(o => o.parent && o.parent.remove(o));
+}
+
+loader.load(MALE, gltf => {
+  const model = gltf.scene;
+  drop(model);
+  scene.add(model);
+  mixer = new THREE.AnimationMixer(model);
+
+  const bar = document.getElementById('clips');
+  gltf.animations.slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach(clip => {
+      const short = clip.name.replace(/^knight_/, '');
+      const b = document.createElement('button');
+      b.textContent = (NICE[short] || short) + '  ' + clip.duration.toFixed(1) + 's';
+      b.addEventListener('click', () => play(clip, b));
+      bar.appendChild(b);
+      if (short === '01_ThuThe') play(clip, b);
+    });
+  frame();
+  document.getElementById('loading').remove();
+}, undefined, err => {
+  document.getElementById('loading').textContent = 'không tải được: ' + err;
+});
+
+function frame() {
+  const box = new THREE.Box3();
+  scene.traverse(o => { if (o.isSkinnedMesh) box.expandByObject(o); });
+  const size = box.getSize(new THREE.Vector3());
+  const mid = box.getCenter(new THREE.Vector3());
+  controls.target.set(mid.x, mid.y, mid.z);
+  // Rig VRoid quay mặt về +Z, ngược với rig Mixamo của hai nhân vật kia —
+  // đặt máy quay ở -Z là nhìn vào lưng.
+  const need = Math.max(size.y * 1.9, size.x * 1.9 / camera.aspect);
+  camera.position.set(mid.x, mid.y + size.y * 0.04, mid.z + need);
+  controls.update();
+}
+
+function play(clip, btn) {
+  const next = mixer.clipAction(clip);
+  if (current && current !== next) current.fadeOut(0.22);
+  next.reset().fadeIn(0.22).play();
+  current = next;
+  [...btn.parentNode.children].forEach(c => c.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+function pair(on) {
+  paired = on;
+  document.getElementById('btn-pair').classList.toggle('on', on);
+  document.getElementById('btn-solo').classList.toggle('on', !on);
+  if (!on) {
+    if (base) base.visible = false;
+    frame();
+    return;
+  }
+  if (base) { base.visible = true; frame(); return; }
+  loader.load(BASE, g => {
+    base = g.scene;
+    drop(base);
+    base.position.x = -0.55;
+    scene.add(base);
+    scene.traverse(o => { if (o.isSkinnedMesh && o.parent === base) o.frustumCulled = false; });
+    frame();
+  });
+}
+document.getElementById('btn-solo').addEventListener('click', () => pair(false));
+document.getElementById('btn-pair').addEventListener('click', () => pair(true));
+
+const rateEl = document.getElementById('rate');
+const rateOut = document.getElementById('rate-out');
+rateEl.addEventListener('input', () => {
+  rate = rateEl.value / 100;
+  rateOut.textContent = rate.toFixed(2).replace('.', ',') + '×';
+});
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+renderer.setClearColor(0x000000, 0);
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  if (mixer) mixer.update(clock.getDelta() * rate);
+  if (current) {
+    clockEl.textContent = current.time.toFixed(2).replace('.', ',') + ' / '
+                        + current.getClip().duration.toFixed(2).replace('.', ',') + ' s';
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

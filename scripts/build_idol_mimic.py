@@ -135,8 +135,15 @@ FRAMES = {
                   'J_Bip_L_UpperArm', 'J_Bip_R_UpperArm')),
 }
 
-IDOL = os.path.join(ROOT, 'source', 'female_singer_anime_idol_base.glb')
-OUT_DIR = os.path.join(ROOT, 'build', 'idol_mimic')
+# Đích của phép chuyển. Nhân vật nam là bản đã nắn dáng của chính cô ca sĩ nên
+# dùng chung y hệt bảng ánh xạ; chuyển được lên anh ta cũng là phép kiểm rằng
+# nắn dáng không làm hỏng bộ xương.
+TARGETS = {
+    'nu':  (os.path.join(ROOT, 'source', 'female_singer_anime_idol_base.glb'),
+            os.path.join(ROOT, 'build', 'idol_mimic'), ''),
+    'nam': (os.path.join(ROOT, 'build', 'idol_male', 'idol_male.glb'),
+            os.path.join(ROOT, 'build', 'idol_male'), 'male_'),
+}
 
 
 def local_frame(arm, names):
@@ -267,14 +274,17 @@ def armature_of(objs):
 def main():
     args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     which = args[0] if args else 'cungthu'
-    if which not in SOURCES:
-        raise SystemExit('nguồn phải là một trong: %s' % ', '.join(SOURCES))
+    who = args[1] if len(args) > 1 else 'nu'
+    if which not in SOURCES or who not in TARGETS:
+        raise SystemExit('dùng: <%s> [<%s>]'
+                         % ('|'.join(SOURCES), '|'.join(TARGETS)))
     cfg = SOURCES[which]
+    idol_path, out_dir, out_pre = TARGETS[who]
     clean()
 
-    print('>>> Nạp cô ca sĩ')
+    print('>>> Nạp nhân vật đích (%s)' % who)
     before = set(bpy.data.objects)
-    bpy.ops.import_scene.gltf(filepath=IDOL)
+    bpy.ops.import_scene.gltf(filepath=idol_path)
     idol_arm = armature_of(set(bpy.data.objects) - before)
 
     print('>>> Nạp %s làm nguồn động tác' % cfg['ten'])
@@ -363,8 +373,8 @@ def main():
         if act.name not in keep:
             bpy.data.actions.remove(act)
 
-    os.makedirs(OUT_DIR, exist_ok=True)
-    out = os.path.join(OUT_DIR, cfg['ra'])
+    os.makedirs(out_dir, exist_ok=True)
+    out = os.path.join(out_dir, out_pre + cfg['ra'])
     print('>>> Xuất %s' % out)
     bpy.ops.export_scene.gltf(
         filepath=out, export_format='GLB',
