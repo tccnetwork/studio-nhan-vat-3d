@@ -186,6 +186,13 @@ cái thiếu là chiều dài. Da đậm hơn bằng cách nhân thẳng vào pi
 da, theo từng kênh để ra nước da rám nắng chứ không phải xám: độ sáng trung
 bình 0,86 xuống 0,55.
 
+Lưới đầu VRoid vốn hở: một mảng lớn ở sau sọ (vòng biên 88 cạnh, chu vi 0,72 m)
+cộng bốn vòng quanh hai vành tai. Mái tóc dài gốc che kín nên không ai thấy,
+cắt tóc ngắn thì nhìn thủng ra tận nền. Đếm cạnh biên trên cả bản gốc lẫn bản
+nắn cho đúng 1110 như nhau, nên biết chắc không phải phép nắn làm rách. Vá đúng
+năm mảng ấy — lưới mặt có 41 vòng biên, phần lớn là cố ý, và vá nhầm hốc mắt là
+bịt mất con mắt.
+
 Một cái bẫy nữa, do chính tôi gây ra rồi phải sửa: phép nén miệng dùng chung
 một bán trục dọc cho cả hai chiều, mà chóp mũi chỉ cách môi trên 9 mm nên nó
 nằm gọn trong vùng ảnh hưởng — đo được chóp mũi tụt 15 mm, đúng thứ nhìn ra là

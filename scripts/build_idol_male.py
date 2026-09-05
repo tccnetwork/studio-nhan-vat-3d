@@ -361,6 +361,76 @@ def build_nose(face):
           % (n, NOSE_OUT * 1000, NOSE_TALL))
 
 
+SKIN_MAT = 'Face_00_SKIN'
+PATCH_MIN_PERIM = 0.15    # m, dưới mức này là hốc mắt và khe mí — không vá
+
+
+def close_head_holes(face):
+    """Vá những mảng hở của lưới đầu.
+
+    Lưới đầu VRoid hở hẳn một mảng lớn ở sau sọ — một vòng biên 88 cạnh, chu vi
+    0,74 m — cộng bốn vòng quanh hai vành tai. Mái tóc dài gốc luôn che kín nên
+    không ai thấy; cắt tóc ngắn thì nhìn thủng ra tận nền, rõ nhất là chỗ sau
+    dái tai.
+
+    Chỉ vá vòng nào thuộc vật liệu DA và đủ lớn. Lưới mặt có 41 vòng biên, phần
+    lớn là cố ý: khe mí, dải chân mày, hốc miệng, và hai HỐC MẮT — vá hốc mắt
+    là bịt mất con mắt.
+    """
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(face.data)
+    bm.edges.ensure_lookup_table()
+    mats = [m.name for m in face.data.materials]
+    skin = mats.index(SKIN_MAT) if SKIN_MAT in mats else 0
+
+    bnd = [e for e in bm.edges if len(e.link_faces) == 1]
+    adj = {}
+    for e in bnd:
+        for v in e.verts:
+            adj.setdefault(v.index, []).append(e)
+    seen, groups = set(), []
+    for e in bnd:
+        if e.index in seen:
+            continue
+        stack, comp = [e], []
+        while stack:
+            x = stack.pop()
+            if x.index in seen:
+                continue
+            seen.add(x.index)
+            comp.append(x)
+            for v in x.verts:
+                for y in adj[v.index]:
+                    if y.index not in seen:
+                        stack.append(y)
+        groups.append(comp)
+
+    mw = face.matrix_world
+    want = []
+    for comp in groups:
+        if not all(f.material_index == skin for e in comp for f in e.link_faces):
+            continue
+        per = sum(((mw @ e.verts[0].co) - (mw @ e.verts[1].co)).length for e in comp)
+        if per >= PATCH_MIN_PERIM:
+            want.append((comp, per))
+    if not want:
+        print('    không có mảng hở nào cần vá')
+        bm.free()
+        return
+    before = len(bm.faces)
+    for comp, _per in want:
+        bmesh.ops.holes_fill(bm, edges=comp, sides=0)
+    for f in bm.faces[before:]:
+        f.material_index = skin
+    bm.to_mesh(face.data)
+    bm.free()
+    face.data.update()
+    print('    vá %d mảng hở (chu vi %s), thêm %d mặt'
+          % (len(want), ', '.join('%.2f' % p for _c, p in want),
+             len(face.data.polygons) - before))
+
+
 def darken_skin():
     """Nhân pixel của ảnh da xuống cho nước da đậm hơn.
 
@@ -443,6 +513,9 @@ def main():
     body = bpy.data.objects['Body']
     face = next(o for o in bpy.data.objects
                 if o.type == 'MESH' and o.name.startswith('Face'))
+
+    print('>>> Vá lưới đầu')
+    close_head_holes(face)
 
     print('>>> Da đậm hơn')
     darken_skin()
