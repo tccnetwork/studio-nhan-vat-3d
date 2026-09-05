@@ -210,14 +210,14 @@ dl.facts dd {
         <dt>mũi tên</dt><dd>trên cung</dd>
         <dt>texture</dt><dd>0</dd>
         <dt>xương</dt><dd>87</dd>
-        <dt>clip Mixamo</dt><dd>7 → 5</dd>
-        <dt>GLB nén Draco</dt><dd>0,78 MB</dd>
+        <dt>clip Mixamo</dt><dd>7 → 4</dd>
+        <dt>GLB nén Draco</dt><dd>0,54 MB</dd>
       </dl>
     </div>
   </div>
 
   <section class="notes card">
-    <h2>Năm chỗ phải gỡ</h2>
+    <h2>Sáu chỗ phải gỡ</h2>
     <ol>
       <li><b>Bảy món quần áo dùng chung một vật liệu.</b> Không có texture thì áo,
       giáp, mũ, quần, giày, ống tên và ống tay thành một khối màu duy nhất. Tách
@@ -241,6 +241,14 @@ dl.facts dd {
       nên giờ nó đi theo cung ở mọi tư thế. Tiện thể bỏ
       <span class="num">2</span> clip trùng lặp hoàn toàn — kiểm ở mức dữ liệu thì
       chúng giống hệt nhau ở cả <span class="num">264</span> kênh.</li>
+
+      <li><b>Bảy “clip” chỉ là một động tác bị cắt cụt.</b> Trượt từng clip ngắn
+      dọc clip dài thì cả bốn đều khớp từ khung 1 với sai lệch <span class="num">0°</span> —
+      chúng là cùng một chuỗi cắt ở 27, 30, 32 và 71 khung; ba bản 202 khung thì
+      trùng nhau ở cả <span class="num">264</span> kênh. Bản đầy đủ là một chu
+      trình bắn cung, và các khung <span class="num">62, 138, 173, 202</span> có
+      tư thế giống hệt nhau — đó là thế thủ mà mỗi đoạn đều quay về. Cắt ở đúng
+      bốn mốc ấy được bốn clip tự khép vòng và nối được với nhau.</li>
 
       <li><b>Tóc nằm chung lưới với mũ trùm</b> nên bị tô xanh lá, thành mấy cái gai
       vải trước mặt. Lưới <code>helmet</code> có <span class="num">61</span> mảnh rời:
@@ -322,7 +330,11 @@ loader.load(MODEL, gltf => {
   const box_ = document.getElementById('clips');
   gltf.animations.forEach((clip, i) => {
     const b = document.createElement('button');
-    b.textContent = (clip.duration).toFixed(1) + ' giây';
+    // Tên clip có nghĩa hơn độ dài, sau khi đã cắt clip dài thành bốn đoạn.
+    const nice = { '01_VaoThe': 'Vào thế', '02_RutTen': 'Rút tên',
+                   '03_GuongVaBan': 'Giương & bắn', '04_HaCung': 'Hạ cung' };
+    b.textContent = (nice[clip.name] || clip.name)
+                  + '  ' + clip.duration.toFixed(1) + 's';
     b.addEventListener('click', () => play(clip, b));
     box_.appendChild(b);
     if (i === gltf.animations.length - 1) play(clip, b);

@@ -332,6 +332,63 @@ def drop_duplicate_actions():
             seen[key] = act.name
 
 
+# Bảy "clip" trong FBX không phải bảy động tác. Đo bằng cách trượt từng clip
+# ngắn dọc clip dài: cả bốn đều khớp từ khung 1 với sai lệch ĐÚNG 0° — chúng là
+# cùng một động tác bị cắt cụt ở 27, 30, 32 và 71 khung. Ba bản 202 khung thì
+# trùng nhau ở cả 264 kênh.
+#
+# Bản đầy đủ là một chu trình bắn cung, và các khung 62, 138, 173, 202 có tư
+# thế giống hệt nhau (lệch 0°) — đó là thế thủ mà mỗi đoạn đều quay về. Nên cắt
+# ở đúng bốn mốc ấy thì được bốn clip tự khép vòng và nối được với nhau.
+SEGMENTS = [
+    ('01_VaoThe',      1,  62),   # từ tư thế gốc vào thế thủ
+    ('02_RutTen',     62, 138),   # tay phải hạ xuống 0,03 rồi đưa lên 1,51
+    ('03_GuongVaBan', 138, 173),  # tay phải lên 1,67, hai tay cách nhau 0,23
+    ('04_HaCung',     173, 202),  # trở về thế thủ
+]
+
+
+def split_long_clip():
+    """Cắt clip dài thành bốn đoạn tại những mốc có cùng tư thế."""
+    if not bpy.data.actions:
+        return
+    src = max(bpy.data.actions, key=lambda a: a.frame_range[1] - a.frame_range[0])
+    made = []
+    for name, lo, hi in SEGMENTS:
+        act = bpy.data.actions.new(name)
+        for fc in src.fcurves:
+            nfc = act.fcurves.new(fc.data_path, index=fc.array_index,
+                                  action_group=fc.group.name if fc.group else '')
+            nfc.keyframe_points.add(hi - lo + 1)
+            for k, f in enumerate(range(lo, hi + 1)):
+                kp = nfc.keyframe_points[k]
+                kp.co = (f - lo + 1, fc.evaluate(f))
+                kp.interpolation = 'LINEAR'
+            nfc.update()
+        act.use_fake_user = True
+        made.append((name, hi - lo + 1))
+    for a in list(bpy.data.actions):
+        if a.name not in dict(made):
+            bpy.data.actions.remove(a)
+
+    # Action rời không tự đi vào file: bộ xuất glTF lấy hoạt ảnh từ các strip
+    # NLA. Bỏ bước này thì GLB ra 0,16 MB và không có clip nào.
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    if arm:
+        if not arm.animation_data:
+            arm.animation_data_create()
+        ad = arm.animation_data
+        ad.action = None
+        for t in list(ad.nla_tracks):
+            ad.nla_tracks.remove(t)
+        for name, _n in made:
+            track = ad.nla_tracks.new()
+            track.name = name
+            track.strips.new(name, 1, bpy.data.actions[name])
+    print('    cắt clip dài thành %d đoạn: %s'
+          % (len(made), ', '.join('%s %d khung' % m for m in made)))
+
+
 def tidy_actions():
     """Đặt lại tên bảy clip Mixamo. Tên gốc kiểu
     'Armature.001|Armature.001|Armature.004|mixamo.com|Layer0.001' vừa dài vừa
@@ -394,17 +451,17 @@ def main():
             split_hood_hair()
         print('    %-14s %-10s %s  nhám %.2f' % (obj.name, label, color, rough))
 
-    print('>>> Lắp mũi tên và dọn clip trùng')
+    print('>>> Lắp mũi tên và dọn hoạt ảnh')
     nock_arrow_on_bow()
     drop_duplicate_actions()
-    tidy_actions()
+    split_long_clip()
 
     os.makedirs(OUT_DIR, exist_ok=True)
     out = os.path.join(OUT_DIR, 'char6.glb')
     print('>>> Xuất %s' % out)
     bpy.ops.export_scene.gltf(
         filepath=out, export_format='GLB',
-        export_animations=True, export_nla_strips=False,
+        export_animations=True, export_nla_strips=True,
         export_skins=True, export_morph=False,
         export_draco_mesh_compression_enable=True,
         export_draco_mesh_compression_level=6,
@@ -417,7 +474,7 @@ def main():
     web = os.path.join(OUT_DIR, 'char6_web.glb')
     bpy.ops.export_scene.gltf(
         filepath=web, export_format='GLB',
-        export_animations=True, export_nla_strips=False,
+        export_animations=True, export_nla_strips=True,
         export_skins=True, export_morph=False,
         export_draco_mesh_compression_enable=False)
     print('>>> Xong: %.2f MB (nén Draco) · %.2f MB (bản nhúng)'
