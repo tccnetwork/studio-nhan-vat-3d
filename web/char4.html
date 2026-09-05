@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hiệp Sĩ Thập Tự</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --crimson: #A63A46;
+  --steel:   #7C848E;
+  --ground:  #ECEAE5;
+  --panel:   #FFFFFFEE;
+  --line:    #C7C4BD;
+  --text:    #232427;
+  --muted:   #5D6167;
+  --stage-a: #D9D7D1;
+  --stage-b: #B6B8B8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --crimson: #C95563;
+    --ground:  #131519;
+    --panel:   #1D2026EE;
+    --line:    #333840;
+    --text:    #E4E3DE;
+    --muted:   #99A0A9;
+    --stage-a: #1A1D22;
+    --stage-b: #0C0E11;
+  }
+}
+:root[data-theme="dark"] {
+  --crimson: #C95563;
+  --ground:  #131519;
+  --panel:   #1D2026EE;
+  --line:    #333840;
+  --text:    #E4E3DE;
+  --muted:   #99A0A9;
+  --stage-a: #1A1D22;
+  --stage-b: #0C0E11;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font: 400 14px/1.55 "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+.wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 22px 20px 30px;
+}
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); } }
+
+header { grid-column: 1 / -1; }
+h1 {
+  font-family: Spectral, Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(26px, 4vw, 38px);
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+  text-wrap: balance;
+}
+h1 em { font-style: italic; font-weight: 400; color: var(--crimson); }
+.sub { margin: 0; color: var(--muted); max-width: 64ch; }
+
+#stage {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--stage-a), var(--stage-b));
+  aspect-ratio: 4 / 5;
+  min-height: 400px;
+}
+#stage canvas { display: block; width: 100%; height: 100%; }
+.pill {
+  position: absolute;
+  font: 400 11.5px/1 "IBM Plex Mono", ui-monospace, monospace;
+  color: var(--muted); letter-spacing: .02em;
+  background: var(--panel); padding: 6px 9px; border-radius: 5px;
+  border: 1px solid var(--line);
+}
+#hint  { left: 12px; bottom: 10px; }
+#clock { right: 12px; bottom: 10px; font-variant-numeric: tabular-nums; }
+#loading {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--muted);
+}
+
+.rail { display: flex; flex-direction: column; gap: 16px; }
+.card {
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 13px 14px 15px; background: var(--panel);
+}
+.card h2 {
+  font: 600 11px/1 "IBM Plex Sans", sans-serif;
+  letter-spacing: .10em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 10px;
+}
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+button {
+  font: 500 12.5px/1 "IBM Plex Sans", sans-serif;
+  color: var(--text); background: transparent;
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 7px 10px; cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+button:hover { border-color: var(--crimson); }
+button:focus-visible { outline: 2px solid var(--crimson); outline-offset: 2px; }
+button.on { background: var(--crimson); border-color: var(--crimson); color: #FDF3F4; }
+
+.speed { display: flex; align-items: center; gap: 9px; margin-top: 10px; }
+.speed input { flex: 1; accent-color: var(--crimson); }
+.speed span {
+  font: 500 12px/1 "IBM Plex Mono", monospace;
+  font-variant-numeric: tabular-nums; color: var(--muted);
+  min-width: 34px; text-align: right;
+}
+
+dl.facts { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; }
+dl.facts dt { color: var(--muted); font-size: 12.5px; }
+dl.facts dd {
+  margin: 0; text-align: right;
+  font: 500 12.5px/1.4 "IBM Plex Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+dl.facts dd b { color: var(--crimson); font-weight: 500; }
+
+.swatches { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.sw { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--muted); }
+.sw i { width: 15px; height: 15px; border-radius: 3px; flex: none; border: 1px solid rgba(0,0,0,.22); }
+
+.notes { grid-column: 1 / -1; }
+.notes ol { margin: 0; padding-left: 1.15em; max-width: 78ch; }
+.notes li { margin-bottom: 9px; color: var(--muted); }
+.notes li b { color: var(--text); font-weight: 600; }
+.notes code {
+  font: 400 12px/1 "IBM Plex Mono", monospace;
+  background: color-mix(in srgb, var(--crimson) 14%, transparent);
+  padding: 1px 4px; border-radius: 3px; color: var(--text);
+}
+.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+
+table.files { width: 100%; border-collapse: collapse; font: 400 11.5px/1.45 "IBM Plex Mono", monospace; }
+table.files th { text-align: left; font-weight: 500; color: var(--muted); padding: 0 0 5px; border-bottom: 1px solid var(--line); }
+table.files td { padding: 4px 0; vertical-align: top; }
+table.files td.n { text-align: right; color: var(--muted); padding-left: 8px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Hiệp Sĩ Thập Tự <em>— gộp ba file thành một</em></h1>
+    <p class="sub">Ba file <code>char4</code> nặng <span class="num">13,41</span> MB hoá ra là cùng
+    một nhân vật, và <span class="num">18</span> hoạt ảnh trong đó hoá ra là cùng một take.
+    Đây là bản gộp: một lưới thân nhiều vùng vật liệu, sáu clip cắt đúng chỗ,
+    <span class="num">0,81</span> MB. Kéo để xoay, cuộn để phóng.</p>
+  </header>
+
+  <div id="stage">
+    <div id="loading">đang tải mô hình…</div>
+    <div class="pill" id="hint">kéo · xoay &nbsp;|&nbsp; cuộn · phóng</div>
+    <div class="pill" id="clock">—</div>
+  </div>
+
+  <div class="rail">
+    <div class="card">
+      <h2>Động tác</h2>
+      <div class="btns" id="clips"></div>
+      <div class="speed">
+        <input id="rate" type="range" min="10" max="150" value="100" aria-label="Tốc độ phát">
+        <span id="rate-out">1,00×</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Ba file nguồn</h2>
+      <table class="files">
+        <tr><th>file</th><th class="n">có gì</th></tr>
+        <tr><td>char4.fbx</td><td class="n">86 xương · 4 lưới · 18 action</td></tr>
+        <tr><td>char4_1.fbx</td><td class="n">69 xương · 1 action · trùng</td></tr>
+        <tr><td>char4_e.fbx</td><td class="n">7 lưới ở thang 100×</td></tr>
+      </table>
+      <p style="margin:9px 0 0;font-size:11.5px;color:var(--muted)">
+        <code>char4_1</code> không có gì mà <code>char4</code> chưa có. Sáu trong
+        bảy lưới của <code>char4_e</code> trùng khít từng đỉnh với lưới thân —
+        chúng là bản đồ phân vùng, không phải chi tiết thêm.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Bảng màu</h2>
+      <div class="swatches">
+        <span class="sw"><i style="background:#B4BAC2"></i>giáp thân, mũ</span>
+        <span class="sw"><i style="background:#9AA1AA"></i>bao tay</span>
+        <span class="sw"><i style="background:#6E757F"></i>giáp chân, váy</span>
+        <span class="sw"><i style="background:#C6CBD2"></i>lưỡi kiếm</span>
+        <span class="sw"><i style="background:#E6E1D3"></i>nền khiên</span>
+        <span class="sw"><i style="background:#8E2F3A"></i>chữ thập</span>
+        <span class="sw"><i style="background:#B08D3F"></i>chuôi, viền khiên</span>
+        <span class="sw"><i style="background:#3F444B"></i>lớp lót</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Số liệu</h2>
+      <dl class="facts">
+        <dt>file nguồn</dt><dd>3 → <b>1</b></dd>
+        <dt>dung lượng</dt><dd>13,41 → <b>0,81</b> MB</dd>
+        <dt>đỉnh nếu gộp thẳng</dt><dd>22 571</dd>
+        <dt>đỉnh bản gộp</dt><dd><b>12 994</b></dd>
+        <dt>lưới</dt><dd>11 → 5</dd>
+        <dt>vật liệu</dt><dd>1 → 14</dd>
+        <dt>hoạt ảnh</dt><dd>18 → <b>6</b></dd>
+        <dt>xương</dt><dd>86</dd>
+        <dt>texture</dt><dd>0</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="notes card">
+    <h2>Bảy chỗ phải gỡ</h2>
+    <ol>
+      <li><b>Cả chín texture đều không tồn tại.</b> <code>Paladin_diffuse.png</code>,
+      <code>_specular</code>, <code>_normal</code> — cả ba file đều trỏ vào thư mục
+      tạm của Mixamo trên một máy khác. Nên toàn bộ màu ở đây là dựng mới, không
+      phải khôi phục.</li>
+
+      <li><b>Sáu lưới của <code>char4_e</code> không phải chi tiết thêm.</b> Đo từng
+      đỉnh thì <code>armor</code> trùng <span class="num">2082/2084</span> đỉnh với
+      lưới thân, <code>head</code> <span class="num">2014/2014</span>,
+      <code>boots</code> <span class="num">1066/1066</span>, hai ống tay
+      <span class="num">693</span> và <span class="num">694</span>. Chúng là bản đồ
+      phân vùng của chính lưới thân. Gộp thẳng cả ba file ra
+      <span class="num">22 571</span> đỉnh với sáu lớp chồng khít nhau; dùng chúng
+      làm bản đồ để gán vật liệu theo vùng thì chỉ còn
+      <span class="num">12 994</span> đỉnh mà nhiều màu hơn.</li>
+
+      <li><b>Chỉ <code>trousers</code> là hình học mới</b> — váy giáp và giáp đùi,
+      trùng <span class="num">0</span> đỉnh với thân, mà <code>char4.fbx</code>
+      thiếu hẳn. Dữ liệu lưới nằm trong hệ Y-up, phép xoay về Z-up nằm ở đối tượng
+      cha, nên đặt ma trận đơn vị là sai — phải nhân ma trận thế giới với
+      <span class="num">0,01</span>, đúng phép đã kiểm bằng toạ độ đỉnh.</li>
+
+      <li><b>Hai lớp váy đan xuyên qua nhau.</b> Không lớp nào nằm trong lớp nào,
+      nên mọi phép “xoá phần bị che” đều bắt được vài mặt rồi thôi, còn lại đá nhau
+      về độ sâu thành mảng lởm chởm khi xoay. Ẩn váy giáp đi thì sạch ngay — đó là
+      cách xác định thủ phạm. Đẩy hẳn lớp ngoài ra <span class="num">14</span> mm
+      theo pháp tuyến thì hết.</li>
+
+      <li><b>Phép “điểm nằm trong khối” làm thủng vai.</b> Dùng
+      <code>closest_point_on_mesh</code> để tìm mặt khuất trong mũ trụ thì nó nhận
+      bừa cả mặt ngực lẫn mặt vai, vì mũ trụ là vỏ hở đáy. Phải bắn tia theo bán
+      cầu phía pháp tuyến: không hướng nào thoát ra thì mặt mới thật sự vô hình.
+      Kèm một cái bẫy đơn vị — <code>ray_cast</code> đo trong hệ toạ độ riêng của
+      đối tượng, mà lưới gắn vào bộ xương tỉ lệ <span class="num">0,01</span>, nên
+      truyền thẳng <span class="num">0,30</span> m vào thì thành
+      <span class="num">3</span> mm và không tia nào chạm được gì.</li>
+
+      <li><b>18 hoạt ảnh thật ra là một.</b> Trượt từng clip ngắn dọc clip dài rồi
+      so tư thế: cả <span class="num">13</span> clip ngắn đều khớp một đoạn của clip
+      <span class="num">445</span> khung với sai lệch dưới <span class="num">1°</span>.
+      Idle khớp từ khung 1, Walk từ 120, nhóm “chết” từ 160, Attack từ 240, Attack2
+      từ 348. Mốc cắt đọc từ nhịp đổi tư thế và cao độ hông, rồi xác nhận bằng ảnh
+      dựng từng khung: hông nằm ở <span class="num">0,11</span> m tới khung
+      <span class="num">232</span>, khung <span class="num">233</span> là khung nội
+      suy rác, khung <span class="num">234</span> đã đứng dậy — chỗ file gốc nối
+      take. Cắt ở <span class="num">232</span> thì không còn cảnh vừa chết xong đã
+      bật dậy. Tiện thể lòi ra một đoạn <i>nhảy chém</i> mà không clip có tên nào
+      chứa.</li>
+
+      <li><b>Chữ thập trên khiên vẽ bằng hình học,</b> vì không có texture nào để
+      dán. Trục của tấm khiên lấy bằng phân tích trục chính chứ không lấy tổng
+      pháp-tuyến-nhân-diện-tích: lần đầu tôi làm thế và ra hướng vô nghĩa, chữ thập
+      không bắt được mặt nào. Chiều của pháp tuyến hỏi xương cầm, đầu nào là đầu
+      trên thì đo bề ngang hai nửa — khiên hình giọt nước phình ở trên. Chỉ chia
+      nhỏ MẶT TRƯỚC: chia cả vỏ thì <span class="num">54</span> mặt thành
+      <span class="num">3456</span>, riêng cái khiên chiếm hơn một phần tư số đỉnh
+      của cả nhân vật.</li>
+    </ol>
+  </section>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+const MODEL = '../build/char4/char4.glb';
+const stage = document.getElementById('stage');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 60);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.enablePan = false;
+controls.minDistance = 1.2;
+controls.maxDistance = 8;
+
+// Từ r155 three.js tính ánh sáng theo đơn vị vật lý, hệ số PI nhân ngầm trước
+// đây đã bị bỏ — phải nhân lại, không thì cảnh tối hơn ~3,14 lần. Giáp thép là
+// vật liệu kim loại hoàn toàn, nó chỉ có màu nhờ PHẢN CHIẾU, nên cần cả đèn
+// vòm lẫn đèn viền, thiếu là ra một khối xám chết.
+const L = Math.PI;
+const key = new THREE.DirectionalLight(0xfff4e6, 2.3 * L);
+key.position.set(2.6, 3.2, 2.4); scene.add(key);
+const fill = new THREE.DirectionalLight(0xd6e2ff, 0.85 * L);
+fill.position.set(-2.8, 1.2, 1.6); scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffffff, 1.5 * L);
+rim.position.set(-0.6, 2.4, -3.4); scene.add(rim);
+scene.add(new THREE.HemisphereLight(0xc4d4e8, 0x2b2a26, 0.9 * L));
+
+const NICE = { '01_ThuThe': '🛡 Thủ thế', '02_DiBo': 'Đi bộ',
+               '03_GucNga': '💀 Gục ngã', '04_ChemNgang': '⚔️ Chém ngang',
+               '05_NhayChem': '🌀 Nhảy chém', '06_DamThang': '🗡️ Đâm thẳng' };
+
+const draco = new DRACOLoader();
+draco.setDecoderPath('vendor/draco/');
+const loader = new GLTFLoader();
+loader.setDRACOLoader(draco);
+
+let mixer = null, current = null, rate = 1.0;
+const clockEl = document.getElementById('clock');
+
+loader.load(MODEL, gltf => {
+  const model = gltf.scene;
+  scene.add(model);
+
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const mid = box.getCenter(new THREE.Vector3());
+  controls.target.set(mid.x, mid.y, mid.z);
+  // Nhân vật Mixamo quay mặt về -Z sau khi qua glTF, nên máy quay phải đứng ở
+  // phía -Z; đứng ở +Z là nhìn vào lưng. Lùi 2,2 lần chiều cao mới lọt trọn
+  // người kèm cây kiếm giơ cao và mũi khiên chìa xuống.
+  camera.position.set(mid.x - size.y * 0.55, mid.y + size.y * 0.06, mid.z - size.y * 2.2);
+  controls.update();
+
+  mixer = new THREE.AnimationMixer(model);
+  const bar = document.getElementById('clips');
+  const clips = gltf.animations.slice().sort((a, b) => a.name.localeCompare(b.name));
+  clips.forEach(clip => {
+    const b = document.createElement('button');
+    b.textContent = (NICE[clip.name] || clip.name) + '  ' + clip.duration.toFixed(1) + 's';
+    b.addEventListener('click', () => play(clip, b));
+    bar.appendChild(b);
+    if (clip.name === '01_ThuThe') play(clip, b);
+  });
+  document.getElementById('loading').remove();
+}, undefined, err => {
+  document.getElementById('loading').textContent = 'không tải được: ' + err;
+});
+
+function play(clip, btn) {
+  const next = mixer.clipAction(clip);
+  if (current && current !== next) current.fadeOut(0.22);
+  next.reset().fadeIn(0.22).play();
+  current = next;
+  [...btn.parentNode.children].forEach(c => c.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+const rateEl = document.getElementById('rate');
+const rateOut = document.getElementById('rate-out');
+rateEl.addEventListener('input', () => {
+  rate = rateEl.value / 100;
+  rateOut.textContent = rate.toFixed(2).replace('.', ',') + '×';
+});
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+renderer.setClearColor(0x000000, 0);
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  if (mixer) mixer.update(clock.getDelta() * rate);
+  if (current) {
+    clockEl.textContent = current.time.toFixed(2).replace('.', ',') + ' / '
+                        + current.getClip().duration.toFixed(2).replace('.', ',') + ' s';
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
