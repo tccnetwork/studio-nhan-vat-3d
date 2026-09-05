@@ -243,6 +243,12 @@ def split_hood_hair():
 
 # Mũi tên nằm ngửa dưới chân vì xương "arrow" treo vào Hips, và đo được nó
 # đứng yên tuyệt đối trong cả bảy clip — không clip nào dùng nó để bắn.
+# Mũi tên rời dài 0,75 m trong khi năm thân tên trong ống chỉ dựng nửa trên,
+# dài 0,374 m — cắm chung vào ống thì nó thò ra dài gấp đôi, nhìn không hợp.
+# Trên cung cũng không hợp vì chưa có động tác bắn nào. Nên bỏ hẳn nó khỏi bản
+# xuất. Đặt False thì quay lại cách cắm vào ống.
+HIDE_ARROW = True
+
 QUIVER_MESH = 'arrow_box'
 QUIVER_BONE = 'mixamorig:Spine2'      # ống tên bám chủ yếu vào xương này
 ARROW_BONE = 'mixamorig:arrow'
@@ -293,6 +299,29 @@ def _long_axis(pts):
         v = -v
     ext = [(p - c).dot(v) for p in pts]
     return c, v, max(ext) - min(ext), max(ext)
+
+
+def hide_arrow():
+    """Bỏ hẳn mũi tên rời khỏi bản xuất, cùng xương của nó."""
+    mesh = bpy.data.objects.get('arrow')
+    if mesh is not None:
+        bpy.data.objects.remove(mesh, do_unlink=True)
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    if arm and ARROW_BONE in arm.data.bones:
+        prev = bpy.context.view_layer.objects.active
+        bpy.context.view_layer.objects.active = arm
+        bpy.ops.object.mode_set(mode='EDIT')
+        eb = arm.data.edit_bones
+        eb.remove(eb[ARROW_BONE])
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.context.view_layer.objects.active = prev
+    dropped = 0
+    for act in bpy.data.actions:
+        for fc in [f for f in act.fcurves
+                   if f.data_path.startswith('pose.bones["%s"]' % ARROW_BONE)]:
+            act.fcurves.remove(fc)
+            dropped += 1
+    print('    ẩn mũi tên rời: bỏ lưới, bỏ xương, bỏ %d đường cong' % dropped)
 
 
 def put_arrow_in_quiver():
@@ -452,6 +481,163 @@ def split_long_clip():
           % (len(made), ', '.join('%s %d khung' % m for m in made)))
 
 
+# ---- Dựng động tác bắn ----------------------------------------------------
+#
+# Bốn đoạn có sẵn KHÔNG có động tác bắn nào: đứng-bước, nhào lộn, nâng cung,
+# xoay người. Không có lúc kéo dây, không có lúc buông. Nên đoạn này là do dựng
+# thêm, không phải khôi phục thứ có sẵn trong file.
+#
+# Tư thế tay đặt bằng IK hai xương chứ không gõ quaternion: cho trước vị trí
+# bàn tay thì giải ra khuỷu, nên tay luôn co duỗi trong tầm giải phẫu. Phần
+# thân giữ nguyên tư thế thủ lấy từ khung đầu của 03_NangCung.
+
+# Tắt: đoạn này dựng ra nhìn hỏng — cung dựng đứng cạnh mặt, hai tay vặn, không
+# ra thế giương cung. Giữ mã lại để làm tiếp, nhưng không đưa vào bản xuất.
+MAKE_SHOOT = False
+
+SHOOT_NAME = '05_BanTen'
+SHOOT_FPS = 30
+# (giây, tay cung duỗi bao nhiêu phần tầm với, tay dây lùi bao nhiêu mét sau cằm)
+SHOOT_KEYS = [
+    (0.00, 0.55, -0.02),   # thủ
+    (0.35, 0.88, 0.02),    # nâng cung, tay trái duỗi về đích
+    (0.85, 0.92, 0.26),    # kéo hết dây, tay phải về sau cằm
+    (1.05, 0.92, 0.27),    # giữ
+    (1.15, 0.90, 0.10),    # buông, tay phải bật nhẹ ra sau
+    (1.75, 0.55, -0.02),   # về thủ
+]
+RELEASE_T = 1.15
+ARROW_SPEED = 26.0        # m/s
+ARROW_GONE = 0.30         # giây sau khi buông thì mất hẳn
+
+
+def _two_bone_ik(arm, upper, lower, end, target, pole):
+    """Đặt bàn tay vào đúng target bằng cách giải khuỷu, rồi nhắm hai xương.
+
+    Nhắm từng xương tới khớp kế tiếp — cùng cách bộ retarget của dự án làm —
+    nên phép xoay quay quanh ĐẦU xương, không quanh gốc toạ độ.
+    """
+    from mathutils import Matrix, Vector
+    mw = arm.matrix_world
+    pb_u, pb_l, pb_e = arm.pose.bones[upper], arm.pose.bones[lower], arm.pose.bones[end]
+    a = mw @ pb_u.head
+    l1 = (mw @ pb_l.head - a).length
+    l2 = (mw @ pb_e.head - (mw @ pb_l.head)).length
+    to = target - a
+    d = min(to.length, (l1 + l2) * 0.995)
+    if d < 1e-5:
+        return
+    dirv = to.normalized()
+    cos_a = max(-1.0, min(1.0, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d)))
+    ang = math.acos(cos_a)
+    axis = dirv.cross(pole - a)
+    if axis.length < 1e-5:
+        axis = dirv.cross(Vector((0.0, 0.0, 1.0)))
+    axis.normalize()
+    elbow = a + (Matrix.Rotation(ang, 4, axis) @ dirv) * l1
+
+    for bone, child_pos in ((upper, elbow), (lower, a + dirv * d)):
+        pb = arm.pose.bones[bone]
+        head = mw @ pb.head
+        cur = (mw @ arm.pose.bones[{upper: lower, lower: end}[bone]].head) - head
+        want = child_pos - head
+        if cur.length < 1e-6 or want.length < 1e-6:
+            continue
+        q = cur.normalized().rotation_difference(want.normalized())
+        m = q.to_matrix().to_4x4() @ pb.matrix
+        m.translation = pb.matrix.translation
+        pb.matrix = m
+        bpy.context.view_layer.update()
+
+
+def make_shoot_clip():
+    """Dựng thêm một đoạn: giương cung, buông dây, mũi tên bay đi rồi mất."""
+    from mathutils import Matrix, Vector
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    if arm is None:
+        return
+    base = bpy.data.actions.get('03_NangCung')
+    if base is None:
+        return
+
+    ad = arm.animation_data
+    ad.action = base
+    if getattr(base, 'slots', None):
+        ad.action_slot = base.slots[0]
+    bpy.context.scene.frame_set(1)
+    bpy.context.view_layer.update()
+    ready = {pb.name: (pb.rotation_quaternion.copy(), pb.location.copy())
+             for pb in arm.pose.bones}
+
+    mw = arm.matrix_world
+    g = lambda n: mw @ arm.pose.bones[n].head
+    hips, head = g('mixamorig:Hips'), g('mixamorig:Head')
+    grip = g('mixamorig:Left_arch1')
+    aim = Vector((grip.x - hips.x, grip.y - hips.y, 0.0)).normalized()
+    lateral = aim.cross(Vector((0.0, 0.0, 1.0))).normalized()
+    reach = ((g('mixamorig:LeftForeArm') - g('mixamorig:LeftArm')).length
+             + (g('mixamorig:LeftHand') - g('mixamorig:LeftForeArm')).length)
+    l_sh, r_sh = g('mixamorig:LeftArm'), g('mixamorig:RightArm')
+    chin = head + Vector((0.0, 0.0, -0.06)) + aim * 0.02
+
+    act = bpy.data.actions.new(SHOOT_NAME)
+    ad.action = act
+    if getattr(act, 'slots', None):
+        ad.action_slot = act.slots[0]
+
+    spine2 = arm.pose.bones['mixamorig:Spine2']
+    arrow_pb = arm.pose.bones['mixamorig:arrow']
+    arrow_rest_local = (arrow_pb.location.copy(), arrow_pb.rotation_quaternion.copy())
+
+    last = SHOOT_KEYS[-1][0]
+    for t, extend, pull in SHOOT_KEYS:
+        f = int(round(t * SHOOT_FPS)) + 1
+        for pb in arm.pose.bones:            # bắt đầu lại từ tư thế thủ
+            q, loc = ready[pb.name]
+            pb.rotation_quaternion = q.copy()
+            pb.location = loc.copy()
+        bpy.context.view_layer.update()
+
+        bow_target = l_sh + aim * (reach * extend) + Vector((0.0, 0.0, 0.06))
+        _two_bone_ik(arm, 'mixamorig:LeftArm', 'mixamorig:LeftForeArm',
+                     'mixamorig:LeftHand', bow_target,
+                     l_sh + lateral * 0.4 + Vector((0.0, 0.0, -0.5)))
+        string_target = chin - aim * pull + lateral * 0.03
+        _two_bone_ik(arm, 'mixamorig:RightArm', 'mixamorig:RightForeArm',
+                     'mixamorig:RightHand', string_target,
+                     r_sh - aim * 0.3 + lateral * 0.35)
+
+        for pb in arm.pose.bones:
+            pb.keyframe_insert(data_path='rotation_quaternion', frame=f)
+        arm.pose.bones['mixamorig:Hips'].keyframe_insert(data_path='location', frame=f)
+
+    # --- mũi tên: bám cung tới lúc buông, sau đó bay thẳng rồi thu về 0 ---
+    n_frames = int(round(last * SHOOT_FPS)) + 1
+    rel_f = int(round(RELEASE_T * SHOOT_FPS)) + 1
+    gone_f = rel_f + int(round(ARROW_GONE * SHOOT_FPS))
+    for f in range(1, n_frames + 1):
+        bpy.context.scene.frame_set(f)
+        bpy.context.view_layer.update()
+        s2 = mw @ spine2.matrix                     # hệ của xương cha
+        hand = mw @ arm.pose.bones['mixamorig:LeftHand'].head
+        if f <= rel_f:
+            pos, scale = hand + aim * 0.10, 1.0
+        else:
+            dt = (f - rel_f) / SHOOT_FPS
+            pos = hand + aim * (0.10 + ARROW_SPEED * dt)
+            scale = max(0.0, 1.0 - (f - rel_f) / max(1, gone_f - rel_f))
+        local = s2.inverted() @ Matrix.Translation(pos)
+        arrow_pb.location = local.translation
+        arrow_pb.scale = (scale, scale, scale)
+        arrow_pb.keyframe_insert(data_path='location', frame=f)
+        arrow_pb.keyframe_insert(data_path='scale', frame=f)
+
+    act.use_fake_user = True
+    print('    dựng %s: %d khung, buông ở khung %d, mũi tên tắt ở khung %d'
+          % (SHOOT_NAME, n_frames, rel_f, gone_f))
+    return act
+
+
 def tidy_actions():
     """Đặt lại tên bảy clip Mixamo. Tên gốc kiểu
     'Armature.001|Armature.001|Armature.004|mixamo.com|Layer0.001' vừa dài vừa
@@ -515,9 +701,16 @@ def main():
         print('    %-14s %-10s %s  nhám %.2f' % (obj.name, label, color, rough))
 
     print('>>> Lắp mũi tên và dọn hoạt ảnh')
-    put_arrow_in_quiver()
+    hide_arrow() if HIDE_ARROW else put_arrow_in_quiver()
     drop_duplicate_actions()
     split_long_clip()
+    shoot = make_shoot_clip() if MAKE_SHOOT else None
+    if shoot is not None:
+        ad = next(o for o in bpy.data.objects if o.type == 'ARMATURE').animation_data
+        ad.action = None
+        track = ad.nla_tracks.new()
+        track.name = SHOOT_NAME
+        track.strips.new(SHOOT_NAME, 1, shoot)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     out = os.path.join(OUT_DIR, 'char6.glb')
