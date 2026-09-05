@@ -182,6 +182,20 @@ table.files td.n { text-align: right; color: var(--muted); padding-left: 8px; }
     </div>
 
     <div class="card">
+      <h2>Trang bị</h2>
+      <div class="btns" id="gear"></div>
+      <div class="btns" style="margin-top:6px">
+        <button id="btn-nude">Cởi hết</button>
+        <button id="btn-dress">Mặc lại</button>
+      </div>
+      <p style="margin:9px 0 0;font-size:11.5px;color:var(--muted)">
+        Chỉ bốn món này là lưới riêng nên tháo được. Giáp thân, bao tay và giáp
+        chân là <i>vùng vật liệu</i> của cùng một lưới thân — gỡ ra là thủng.
+        Dưới mũ trụ có sẵn một cái đầu đầy đủ, kể cả hai con mắt rời.
+      </p>
+    </div>
+
+    <div class="card">
       <h2>Ba file nguồn</h2>
       <table class="files">
         <tr><th>file</th><th class="n">có gì</th></tr>
@@ -206,7 +220,8 @@ table.files td.n { text-align: right; color: var(--muted); padding-left: 8px; }
         <span class="sw"><i style="background:#E6E1D3"></i>nền khiên</span>
         <span class="sw"><i style="background:#8E2F3A"></i>chữ thập</span>
         <span class="sw"><i style="background:#B08D3F"></i>chuôi, viền khiên</span>
-        <span class="sw"><i style="background:#3F444B"></i>lớp lót</span>
+        <span class="sw"><i style="background:#C08B72"></i>da mặt</span>
+        <span class="sw"><i style="background:#2F3742"></i>mắt</span>
       </div>
     </div>
 
@@ -218,7 +233,8 @@ table.files td.n { text-align: right; color: var(--muted); padding-left: 8px; }
         <dt>đỉnh nếu gộp thẳng</dt><dd>22 571</dd>
         <dt>đỉnh bản gộp</dt><dd><b>12 994</b></dd>
         <dt>lưới</dt><dd>11 → 5</dd>
-        <dt>vật liệu</dt><dd>1 → 14</dd>
+        <dt>vật liệu</dt><dd>1 → 16</dd>
+        <dt>món tháo được</dt><dd>4</dd>
         <dt>hoạt ảnh</dt><dd>18 → <b>6</b></dd>
         <dt>xương</dt><dd>86</dd>
         <dt>texture</dt><dd>0</dd>
@@ -358,6 +374,8 @@ loader.load(MODEL, gltf => {
   camera.position.set(mid.x - size.y * 0.55, mid.y + size.y * 0.06, mid.z - size.y * 2.2);
   controls.update();
 
+  buildGear(model);
+
   mixer = new THREE.AnimationMixer(model);
   const bar = document.getElementById('clips');
   const clips = gltf.animations.slice().sort((a, b) => a.name.localeCompare(b.name));
@@ -372,6 +390,40 @@ loader.load(MODEL, gltf => {
 }, undefined, err => {
   document.getElementById('loading').textContent = 'không tải được: ' + err;
 });
+
+// Bốn món là node riêng trong glTF nên ẩn hiện được từng cái. Phần giáp còn
+// lại không tháo được: nó là vùng vật liệu của cùng một lưới thân, ẩn đi thì
+// thủng chứ không lộ ra lớp nào bên dưới.
+const GEAR = [['Helmet', 'Mũ trụ'], ['Shield', 'Khiên'],
+              ['Sword', 'Kiếm'], ['Skirt', 'Váy giáp']];
+const gear = [];
+
+function buildGear(model) {
+  const bar = document.getElementById('gear');
+  for (const [name, label] of GEAR) {
+    const node = model.getObjectByName(name);
+    if (!node) continue;
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.classList.add('on');
+    b.addEventListener('click', () => wear(node, b, !node.visible));
+    bar.appendChild(b);
+    gear.push([node, b]);
+  }
+  document.getElementById('btn-nude')
+    .addEventListener('click', () => gear.forEach(([n, b]) => wear(n, b, false)));
+  document.getElementById('btn-dress')
+    .addEventListener('click', () => gear.forEach(([n, b]) => wear(n, b, true)));
+}
+
+function wear(node, btn, on) {
+  node.visible = on;
+  btn.classList.toggle('on', on);
+  const all = gear.every(([n]) => n.visible);
+  const none = gear.every(([n]) => !n.visible);
+  document.getElementById('btn-dress').classList.toggle('on', all);
+  document.getElementById('btn-nude').classList.toggle('on', none);
+}
 
 function play(clip, btn) {
   const next = mixer.clipAction(clip);

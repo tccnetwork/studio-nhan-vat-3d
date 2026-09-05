@@ -55,6 +55,8 @@ MAIL       = ('#3F444B', 0.70, 1.00)
 CLOTH      = ('#8E2F3A', 0.78, 0.00)
 FIELD      = ('#E6E1D3', 0.62, 0.00)
 GOLD       = ('#B08D3F', 0.32, 1.00)
+SKIN       = ('#C08B72', 0.66, 0.00)
+EYE        = ('#2F3742', 0.30, 0.00)
 
 # Hai vùng dưới đây tên gọi đánh lừa, phải dựng ảnh định danh mới biết:
 # "head" không phải cái đầu — cái đầu nằm gọn trong mũ trụ — mà là cả vùng cổ,
@@ -127,6 +129,52 @@ def clear_old_materials():
 
 def vkey(p):
     return (round(p.x, 4), round(p.y, 4), round(p.z, 4))
+
+
+BONE_LOOK = [
+    ('Da', SKIN, ('mixamorig:Head',)),
+    ('Mat', EYE, ('mixamorig:LeftEye', 'mixamorig:RightEye')),
+]
+
+
+def paint_by_bone(body):
+    """Tô da và mắt theo TRỌNG SỐ XƯƠNG, không theo bản đồ phân vùng.
+
+    Bản đồ của char4_e gộp cả đầu, cổ, vai và lưng trên vào một mảnh tên
+    "head", nên không tách được khuôn mặt ra khỏi tấm giáp vai. Trọng số xương
+    thì tách chính xác: 1800 đỉnh do xương Head chi phối nằm gọn trong khoảng
+    cao độ 1,502–1,724 m, đúng cái đầu và dừng ở quai hàm. Hai con mắt lại là
+    hình học riêng gắn vào xương LeftEye/RightEye.
+
+    Việc này chỉ có nghĩa khi cởi mũ trụ ra — nhưng cởi ra mà mặt bằng thép thì
+    hỏng, nên nó thuộc phần dựng chứ không phải phần trang trí.
+    """
+    gi = {g.name: g.index for g in body.vertex_groups}
+    slot = {}
+    for label, look, bones in BONE_LOOK:
+        ids = {gi[b] for b in bones if b in gi}
+        if not ids:
+            continue
+        body.data.materials.append(make_material(label, look))
+        slot[len(body.data.materials) - 1] = ids
+    if not slot:
+        return
+    dom = []
+    for v in body.data.vertices:
+        best = max(v.groups, key=lambda g: g.weight, default=None)
+        dom.append(best.group if best is not None else -1)
+    count = {k: 0 for k in slot}
+    for poly in body.data.polygons:
+        ids = [dom[i] for i in poly.vertices]
+        win = max(set(ids), key=ids.count)
+        for idx, group in slot.items():
+            if win in group:
+                poly.material_index = idx
+                count[idx] += 1
+                break
+    print('    tô theo xương: %s'
+          % ', '.join('%s %d mặt' % (BONE_LOOK[i][0], c)
+                      for i, c in enumerate(count.values())))
 
 
 def region_map(body, parts):
@@ -618,6 +666,7 @@ def main():
         label, look = REGION_LOOK[n]
         body.data.materials.append(make_material(label, look))
     region_map(body, parts)
+    paint_by_bone(body)
 
     skirt = bring_extra(arm, parts[EXTRA_MESH])
     skirt.name = 'Skirt'
