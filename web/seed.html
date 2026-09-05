@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Seed-san</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --accent:  #1E8FA8;
+  --ground:  #EFEFEE;
+  --panel:   #FFFFFFEE;
+  --line:    #CCCCC9;
+  --text:    #1F2226;
+  --muted:   #5B6068;
+  --stage-a: #DCDDDC;
+  --stage-b: #BCC2C5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --accent: #56C4DC; --ground: #101317; --panel: #1A1E23EE; --line: #2F343B;
+    --text: #E4E5E4; --muted: #949AA3; --stage-a: #181C21; --stage-b: #0A0D10;
+  }
+}
+:root[data-theme="dark"] {
+  --accent: #56C4DC; --ground: #101317; --panel: #1A1E23EE; --line: #2F343B;
+  --text: #E4E5E4; --muted: #949AA3; --stage-a: #181C21; --stage-b: #0A0D10;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ground); color: var(--text);
+  font: 400 14px/1.55 "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+.wrap {
+  display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px;
+  max-width: 1180px; margin: 0 auto; padding: 22px 20px 30px;
+}
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); } }
+header { grid-column: 1 / -1; }
+h1 {
+  font-family: Spectral, Georgia, serif; font-weight: 600;
+  font-size: clamp(26px, 4vw, 38px); letter-spacing: -0.01em;
+  margin: 0 0 4px; text-wrap: balance;
+}
+h1 em { font-style: italic; font-weight: 400; color: var(--accent); }
+.sub { margin: 0; color: var(--muted); max-width: 64ch; }
+#stage {
+  position: relative; border: 1px solid var(--line); border-radius: 10px;
+  overflow: hidden; background: linear-gradient(180deg, var(--stage-a), var(--stage-b));
+  aspect-ratio: 4 / 5; min-height: 400px;
+}
+#stage canvas { display: block; width: 100%; height: 100%; }
+.pill {
+  position: absolute; font: 400 11.5px/1 "IBM Plex Mono", ui-monospace, monospace;
+  color: var(--muted); background: var(--panel); padding: 6px 9px;
+  border-radius: 5px; border: 1px solid var(--line);
+}
+#hint { left: 12px; bottom: 10px; }
+#loading {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--muted);
+}
+.rail { display: flex; flex-direction: column; gap: 16px; }
+.card {
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 13px 14px 15px; background: var(--panel);
+}
+.card h2 {
+  font: 600 11px/1 "IBM Plex Sans", sans-serif; letter-spacing: .10em;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 10px;
+}
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+button {
+  font: 500 12.5px/1 "IBM Plex Sans", sans-serif; color: var(--text);
+  background: transparent; border: 1px solid var(--line); border-radius: 6px;
+  padding: 7px 10px; cursor: pointer; transition: background .12s, border-color .12s;
+}
+button:hover { border-color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.on { background: var(--accent); border-color: var(--accent); color: #F2FBFD; }
+dl.facts { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; }
+dl.facts dt { color: var(--muted); font-size: 12.5px; }
+dl.facts dd {
+  margin: 0; text-align: right;
+  font: 500 12.5px/1.4 "IBM Plex Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+.credit {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+.credit p { margin: 0; font-size: 12.6px; }
+.credit b { color: var(--accent); }
+table.lic { width: 100%; border-collapse: collapse; font: 400 11.5px/1.5 "IBM Plex Mono", monospace; }
+table.lic td { padding: 3px 0; vertical-align: top; }
+table.lic td:first-child { color: var(--muted); padding-right: 10px; }
+.notes { grid-column: 1 / -1; }
+.notes ol { margin: 0; padding-left: 1.15em; max-width: 78ch; }
+.notes li { margin-bottom: 9px; color: var(--muted); }
+.notes li b { color: var(--text); font-weight: 600; }
+.notes code {
+  font: 400 12px/1 "IBM Plex Mono", monospace;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  padding: 1px 4px; border-radius: 3px; color: var(--text);
+}
+.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Seed-san <em>— avatar mẫu của chuẩn VRM</em></h1>
+    <p class="sub">Nhân vật nam tải thẳng từ kho GitHub của chuẩn VRM, không cần tài
+    khoản. <span class="num">132</span> xương, <span class="num">44</span> khẩu hình,
+    và quan trọng nhất: có sẵn năm khẩu hình nguyên âm <code>lip_a</code>
+    <code>lip_i</code> <code>lip_u</code> <code>lip_e</code> <code>lip_o</code> —
+    đúng năm cái mà bộ hát nhép của dự án cần.</p>
+  </header>
+
+  <div id="stage">
+    <div id="loading">đang tải mô hình…</div>
+    <div class="pill" id="hint">kéo · xoay &nbsp;|&nbsp; cuộn · phóng</div>
+  </div>
+
+  <div class="rail">
+    <div class="card">
+      <h2>Khẩu hình nguyên âm</h2>
+      <div class="btns" id="vowels"></div>
+      <h2 style="margin-top:14px">Mắt và cảm xúc</h2>
+      <div class="btns" id="moods"></div>
+    </div>
+
+    <div class="card credit">
+      <h2>Ghi công bắt buộc</h2>
+      <p>Model <b>Seed-san</b> by <b>VirtualCast, Inc.</b><br>
+      VRM Public License 1.0</p>
+      <p style="margin-top:8px;color:var(--muted)">Giấy phép ghi
+      <code>creditNotation: required</code>, nên dòng này phải xuất hiện ở bất cứ
+      đâu nhân vật được dùng.</p>
+    </div>
+
+    <div class="card">
+      <h2>Điều khoản đọc từ trong file</h2>
+      <table class="lic">
+        <tr><td>avatarPermission</td><td>everyone</td></tr>
+        <tr><td>commercialUsage</td><td>corporation</td></tr>
+        <tr><td>allowRedistribution</td><td>true</td></tr>
+        <tr><td>modification</td><td>allowModification<br>Redistribution</td></tr>
+        <tr><td>creditNotation</td><td>required</td></tr>
+      </table>
+      <p style="margin:9px 0 0;font-size:11.5px;color:var(--muted)">
+        VRM nhúng điều khoản vào metadata của chính file, nên không phải đọc trang
+        web rồi đoán.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Số liệu</h2>
+      <dl class="facts">
+        <dt>xương</dt><dd>132</dd>
+        <dt>xương nhân hình</dt><dd>51</dd>
+        <dt>đỉnh</dt><dd>34 059</dd>
+        <dt>lưới</dt><dd>5</dd>
+        <dt>vật liệu</dt><dd>17</dd>
+        <dt>khẩu hình</dt><dd>44</dd>
+        <dt>chiều cao</dt><dd>1,58 m</dd>
+        <dt>VRM gốc</dt><dd>10,92 MB</dd>
+        <dt>GLB nén Draco</dt><dd>6,84 MB</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="notes card">
+    <h2>Vì sao chọn mẫu này</h2>
+    <ol>
+      <li><b>Tải được mà không cần tài khoản.</b> Ba nguồn tôi tìm trước đó đều
+      chặn: Sketchfab trả <code>Authentication credentials were not provided</code>,
+      VRoid Hub trả 403, BOOTH chuyển hướng đòi tài khoản pixiv. Mẫu này nằm trong
+      kho GitHub của chính chuẩn VRM nên tải thẳng bằng một lệnh.</li>
+
+      <li><b>Giấy phép nằm trong file, không phải trên trang web.</b> VRM nhúng
+      điều khoản vào <code>extensions.VRMC_vrm.meta</code>, nên đọc được bằng máy
+      và không có chỗ cho hiểu nhầm. Ở đây là: ai dùng cũng được, cho phép dùng
+      thương mại cấp công ty, cho sửa, cho phát tán lại — đổi lại <b>bắt buộc ghi
+      công</b>.</li>
+
+      <li><b>Có đủ năm nguyên âm.</b> Đây là lý do chính. Mấy mẫu anime nam trên
+      Sketchfab tôi xem đều đọc ra <code>"morph": 0</code> — không một khẩu hình
+      nào, tức là nhân vật không nói và không chớp mắt được, mất đúng phần mà cả
+      dự án này xây quanh. Mẫu này có <code>lip_a/i/u/e/o</code>, <code>blink_L</code>,
+      <code>blink_R</code>, cùng vui, giận, buồn, ngạc nhiên và bốn hướng liếc mắt.</li>
+
+      <li><b>Có đủ ngón tay.</b> <span class="num">51</span> xương nhân hình chuẩn,
+      trong đó có ba đốt cho từng ngón. Phép ghim góc xoay bàn tay của bộ chuyển
+      động tác lấy trục từ đường ngón trỏ–ngón út, nên thiếu ngón là mất luôn phần
+      đó.</li>
+
+      <li><b>Còn một việc phải làm.</b> Tên node ở đây là kiểu rig Blender
+      (<code>upper_arm.L</code>, <code>hand.L</code>, <code>thigh.L</code>) chứ
+      không phải <code>J_Bip_*</code> của VRoid, nên bảng ánh xạ xương chưa dùng
+      lại được ngay. Nhưng VRM 1.0 lưu sẵn bảng ánh xạ xương nhân hình bên trong
+      file, nên dựng bảng bằng cách ĐỌC TỪ FILE sạch hơn là gõ tay tên xương —
+      cách tôi đã làm với Mixamo. Chưa nối nên anh ta chưa có động tác nào.</li>
+    </ol>
+  </section>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+const MODEL = '../build/seed/seed.glb';
+const VOWELS = [['lip_a', 'A'], ['lip_i', 'I'], ['lip_u', 'U'],
+                ['lip_e', 'E'], ['lip_o', 'O']];
+const MOODS = [['blink_L', '😑 Nhắm trái'], ['blink_R', '😑 Nhắm phải'],
+               ['eye_close', '😌 Nhắm cả hai'], ['face_happy', '🙂 Vui'],
+               ['face_angry', '😠 Giận'], ['face_sad', '🙁 Buồn'],
+               ['face_surprise', '😮 Ngạc nhiên']];
+
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(36, 1, 0.05, 60);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.enablePan = false;
+controls.minDistance = 0.4;
+controls.maxDistance = 9;
+
+// Từ r155 three.js tính ánh sáng theo đơn vị vật lý, hệ số PI nhân ngầm trước
+// đây đã bị bỏ — phải nhân lại, không thì cảnh tối hơn ~3,14 lần.
+const L = Math.PI;
+const key = new THREE.DirectionalLight(0xfff5ea, 2.1 * L);
+key.position.set(2.4, 3.0, 2.6); scene.add(key);
+const fill = new THREE.DirectionalLight(0xdce8ff, 0.85 * L);
+fill.position.set(-2.6, 1.4, 1.8); scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffffff, 1.1 * L);
+rim.position.set(-0.4, 2.2, -3.2); scene.add(rim);
+scene.add(new THREE.HemisphereLight(0xc4d4e6, 0x2a2a26, 0.75 * L));
+
+const draco = new DRACOLoader();
+draco.setDecoderPath('vendor/draco/');
+const loader = new GLTFLoader();
+loader.setDRACOLoader(draco);
+
+let faces = [];          // các lưới có khẩu hình
+const active = new Set();
+
+loader.load(MODEL, gltf => {
+  const model = gltf.scene;
+  scene.add(model);
+  model.traverse(o => {
+    if (o.isMesh && o.morphTargetDictionary) faces.push(o);
+  });
+
+  // Khung theo CHIỀU CAO và trục giữa, không theo hộp bao: cánh tay máy chìa
+  // ra tới 1,8 m, lấy tâm hộp bao thì nhân vật lệch hẳn khỏi giữa khung.
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const mid = box.getCenter(new THREE.Vector3());
+  controls.target.set(0, mid.y, 0);
+  camera.position.set(0, mid.y + size.y * 0.05, size.y * 1.85);
+  controls.update();
+
+  build('vowels', VOWELS);
+  build('moods', MOODS);
+  document.getElementById('loading').remove();
+}, undefined, err => {
+  document.getElementById('loading').textContent = 'không tải được: ' + err;
+});
+
+function build(id, list) {
+  const bar = document.getElementById(id);
+  for (const [morph, label] of list) {
+    if (!faces.some(m => morph in m.morphTargetDictionary)) continue;
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', () => toggle(morph, b));
+    bar.appendChild(b);
+  }
+  if (id === 'moods') {
+    const r = document.createElement('button');
+    r.textContent = '↺ Về mặt thường';
+    r.addEventListener('click', () => {
+      active.clear();
+      apply();
+      document.querySelectorAll('#vowels button, #moods button')
+        .forEach(x => x.classList.remove('on'));
+    });
+    bar.appendChild(r);
+  }
+}
+
+function toggle(morph, btn) {
+  if (active.has(morph)) active.delete(morph); else active.add(morph);
+  btn.classList.toggle('on', active.has(morph));
+  apply();
+}
+
+function apply() {
+  for (const m of faces) {
+    if (!m.morphTargetInfluences) continue;
+    m.morphTargetInfluences.fill(0);
+    for (const name of active) {
+      const i = m.morphTargetDictionary[name];
+      if (i !== undefined) m.morphTargetInfluences[i] = 1.0;
+    }
+  }
+}
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+renderer.setClearColor(0x000000, 0);
+
+renderer.setAnimationLoop(() => {
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

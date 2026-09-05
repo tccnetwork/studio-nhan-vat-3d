@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bốn Nhân Vật</title>
+<title>Năm Nhân Vật</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root {
@@ -18,6 +18,7 @@
   --archer:  #5C6B45;
   --knight:  #A63A46;
   --male:    #2F6F8F;
+  --seed:    #1E8FA8;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -32,6 +33,7 @@
     --archer:  #93A876;
     --knight:  #C95563;
     --male:    #6BB2CF;
+    --seed:    #56C4DC;
   }
 }
 :root[data-theme="dark"] {
@@ -46,6 +48,7 @@
   --archer:  #93A876;
   --knight:  #C95563;
   --male:    #6BB2CF;
+  --seed:    #56C4DC;
 }
 * { box-sizing: border-box; }
 body {
@@ -123,7 +126,7 @@ footer code { font-family: "IBM Plex Mono", monospace; }
 </head>
 <body>
 <div class="wrap">
-  <h1>Bốn Nhân Vật <em>— tất cả trình xem</em></h1>
+  <h1>Năm Nhân Vật <em>— tất cả trình xem</em></h1>
   <p class="sub">Mọi nhân vật trong dự án, mỗi người một trang xem riêng chạy thẳng
   trên trình duyệt. Bấm vào ảnh để mở. Tất cả đều dựng bằng Blender headless và
   xem bằng three.js, không có bước nào phải mở giao diện Blender.</p>
@@ -188,6 +191,20 @@ footer code { font-family: "IBM Plex Mono", monospace; }
         <div class="go">mở trang →</div>
       </div>
     </a>
+    <a class="card" style="--c:var(--seed)" href="seed.html">
+      <div class="shot"><img src="thumbs/seed.png" alt="Seed-san"></div>
+      <div class="body">
+        <div class="name">Seed-san <b>· VRM mẫu</b></div>
+        <p class="what">Tải từ kho GitHub của chuẩn VRM, không cần tài khoản. Có
+        sẵn năm khẩu hình nguyên âm nên hát nhép được. Chưa nối động tác.</p>
+        <dl>
+          <dt>xương</dt><dd>132</dd>
+          <dt>khẩu hình</dt><dd>44</dd>
+          <dt>GLB</dt><dd>6,84 MB</dd>
+        </dl>
+        <div class="go">mở trang →</div>
+      </div>
+    </a>
   </div>
 
   <section class="extra">
@@ -215,7 +232,9 @@ footer code { font-family: "IBM Plex Mono", monospace; }
   <footer>
     Dựng lại bất cứ nhân vật nào: <code>scripts/build_*.py</code> chạy bằng Blender
     headless. Model nguồn nằm ngoài repo — xem phần “Bắt đầu” trong
-    <code>README.md</code>.
+    <code>README.md</code>.<br><br>
+    Seed-san model by <b>VirtualCast, Inc.</b> — VRM Public License 1.0.
+    Giấy phép của mẫu này ghi <code>creditNotation: required</code>.
   </footer>
 </div>
 </body>
