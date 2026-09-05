@@ -854,6 +854,152 @@ def push_actions_to_nla():
     print('    đẩy %d action lên NLA' % len(bpy.data.actions))
 
 
+# ---- Khẩu hình chớp mắt và mỉm cười -------------------------------------
+#
+# Model không có sẵn một morph target nào, nên hai khẩu hình này được nặn từ
+# hình học. Đầu có 4432 đỉnh, mỗi mắt 277 đỉnh quanh nó, vùng miệng 1416 —
+# thừa mật độ để biến dạng mà không rách.
+#
+# Mốc đo từ mặt cắt dọc giữa mặt: mắt z 1,646-1,680; mũi nhô nhất ở z 1,627;
+# môi ở z ~1,605 (chỗ mặt nhô lại lần nữa sau khi lõm dưới mũi).
+FACE_MESH = 'HeadAndHand'
+EYE_R = 0.026            # mét, bán kính vùng mí bị kéo
+BLINK_PUSH = 0.0015      # đẩy mí ra trước cho ôm cầu mắt
+MOUTH_Z = 1.605
+MOUTH_X = 0.021          # nửa bề rộng miệng
+# Vùng ảnh hưởng hình BẦU DỤC: rộng ngang, hẹp dọc. Dùng hình tròn bán kính
+# 24 mm thì nó với lên tới z 1,629, tức chạm cánh mũi (mũi nhô nhất ở 1,627) —
+# nhìn ra ngay là mũi bị kéo méo khi cười hết mức.
+MOUTH_RX = 0.027
+MOUTH_RZ = 0.013
+SMILE_LIFT = 0.0045      # nâng khoé miệng
+SMILE_BACK = 0.0020      # kéo khoé ra sau một chút
+SMILE_DEFAULT = 0.45     # mức cười giữ thường trực
+
+
+def _falloff(t):
+    """1 ở tâm, 0 ở mép, mượt hai đầu."""
+    t = max(0.0, min(1.0, t))
+    return 1.0 - (t * t * (3.0 - 2.0 * t))
+
+
+def add_face_shapes():
+    """Nặn hai khẩu hình: nhắm mắt và mỉm cười."""
+    from mathutils import Vector
+    face = bpy.data.objects.get(FACE_MESH)
+    eyes = bpy.data.objects.get('eyes')
+    if face is None or eyes is None:
+        return
+    ep = [eyes.matrix_world @ v.co for v in eyes.data.vertices]
+    left = [p for p in ep if p.x > 0]
+    right = [p for p in ep if p.x <= 0]
+    centres = [sum(g, Vector()) / len(g) for g in (left, right) if g]
+
+    if face.data.shape_keys is None:
+        face.shape_key_add(name='Basis', from_mix=False)
+    basis = face.data.shape_keys.key_blocks['Basis']
+    mw = face.matrix_world
+    inv = mw.inverted()
+
+    blink = face.shape_key_add(name='NhamMat', from_mix=False)
+    moved = 0
+    for i, v in enumerate(face.data.vertices):
+        w = mw @ v.co
+        for c in centres:
+            flat = ((w.x - c.x) ** 2 + (w.z - c.z) ** 2) ** 0.5
+            if flat > EYE_R or w.y > c.y + 0.035:
+                continue
+            k = _falloff(flat / EYE_R)
+            if k <= 0.0:
+                continue
+            # kéo mí về đường ngang giữa mắt: mí trên xuống, mí dưới lên
+            tgt = Vector((w.x, w.y - BLINK_PUSH * k, w.z + (c.z - w.z) * k))
+            blink.data[i].co = inv @ tgt
+            moved += 1
+            break
+
+    smile = face.shape_key_add(name='MimCuoi', from_mix=False)
+    lifted = 0
+    for i, v in enumerate(face.data.vertices):
+        w = mw @ v.co
+        for sx in (MOUTH_X, -MOUTH_X):
+            e = (((w.x - sx) / MOUTH_RX) ** 2 + ((w.z - MOUTH_Z) / MOUTH_RZ) ** 2) ** 0.5
+            if e > 1.0 or w.y > -0.075:
+                continue
+            k = _falloff(e)
+            if k <= 0.0:
+                continue
+            out = 0.0012 if sx > 0 else -0.0012
+            tgt = Vector((w.x + out * k,
+                          w.y + SMILE_BACK * k,
+                          w.z + SMILE_LIFT * k))
+            smile.data[i].co = inv @ tgt
+            lifted += 1
+            break
+
+    blink.value = 0.0
+    smile.value = SMILE_DEFAULT
+    print('    khẩu hình: NhamMat %d đỉnh, MimCuoi %d đỉnh (cười giữ %.2f)'
+          % (moved, lifted, SMILE_DEFAULT))
+    return face
+
+
+BLINK_EVERY = 2.6        # giây giữa hai lần chớp
+BLINK_DOWN = 0.06        # giây nhắm lại
+BLINK_UP = 0.10          # giây mở ra
+
+
+def animate_blink(face):
+    """Chớp mắt trong từng đoạn, đẩy lên NLA cùng tên để gộp vào cùng clip."""
+    keys = face.data.shape_keys
+    if keys is None:
+        return
+    if keys.animation_data is None:
+        keys.animation_data_create()
+    ad = keys.animation_data
+    ad.action = None
+    for t in list(ad.nla_tracks):
+        ad.nla_tracks.remove(t)
+    path = 'key_blocks["NhamMat"].value'
+    total = 0
+    for act_arm in sorted(bpy.data.actions, key=lambda a: a.name):
+        if not act_arm.name[0].isdigit():
+            continue
+        n = int(act_arm.frame_range[1])
+        act = bpy.data.actions.new('blink_' + act_arm.name)
+        fc = act.fcurves.new(path)
+        fc.keyframe_points.insert(1, 0.0).interpolation = 'LINEAR'
+        # Chớp lần đầu ở 35% đoạn, để đoạn ngắn 1 giây cũng có ít nhất một cú.
+        # Bản trước đặt lần đầu ở 1,17 giây nên hai đoạn ngắn không chớp lần nào.
+        t = max(0.30, (n / 30.0) * 0.35)
+        while t * 30 < n - 3:
+            f = t * 30
+            for off, val in ((-BLINK_DOWN * 30, 0.0), (0, 1.0), (BLINK_UP * 30, 0.0)):
+                x = max(1.0, min(float(n), f + off))
+                fc.keyframe_points.insert(x, val).interpolation = 'LINEAR'
+            total += 1
+            t += BLINK_EVERY
+        fc.keyframe_points.insert(float(n), 0.0).interpolation = 'LINEAR'
+        fc.update()
+
+        # Kênh "weights" của glTF ghi TẤT CẢ trọng số morph cùng lúc. Chỉ khoá
+        # mỗi cái chớp mắt thì cái cười bị ghi 0 đè lên và tắt hẳn khi phát —
+        # đo được morph=[0.87, 0] trong lúc chớp. Nên phải khoá giữ nó luôn.
+        fs = act.fcurves.new('key_blocks["MimCuoi"].value')
+        for x in (1.0, float(n)):
+            fs.keyframe_points.insert(x, SMILE_DEFAULT).interpolation = 'LINEAR'
+        fs.update()
+        act.use_fake_user = True
+        track = ad.nla_tracks.new()
+        track.name = act_arm.name
+        # Tên STRIP mới là thứ bộ xuất glTF dùng để gộp, không phải tên action.
+        # Đặt tên action là "blink_..." mà để nguyên tên strip thì file ra thêm
+        # bốn animation rời tên blink_*, và bấm clip thân thì mắt không chớp.
+        strip = track.strips.new(act_arm.name, 1, act)
+        strip.name = act_arm.name
+    print('    chớp mắt: %d lần trên %d đoạn' % (total, len(ad.nla_tracks)))
+
+
 def tidy_actions():
     """Đặt lại tên bảy clip Mixamo. Tên gốc kiểu
     'Armature.001|Armature.001|Armature.004|mixamo.com|Layer0.001' vừa dài vừa
@@ -925,6 +1071,9 @@ def main():
     if not HIDE_ARROW:
         animate_arrow_shot()
     push_actions_to_nla()
+    face = add_face_shapes()
+    if face is not None:
+        animate_blink(face)
     shoot = make_shoot_clip() if MAKE_SHOOT else None
     if shoot is not None:
         ad = next(o for o in bpy.data.objects if o.type == 'ARMATURE').animation_data
@@ -939,7 +1088,7 @@ def main():
     bpy.ops.export_scene.gltf(
         filepath=out, export_format='GLB',
         export_animations=True, export_nla_strips=True,
-        export_skins=True, export_morph=False,
+        export_skins=True, export_morph=True,
         export_draco_mesh_compression_enable=True,
         export_draco_mesh_compression_level=6,
         export_draco_position_quantization=14,
@@ -952,7 +1101,7 @@ def main():
     bpy.ops.export_scene.gltf(
         filepath=web, export_format='GLB',
         export_animations=True, export_nla_strips=True,
-        export_skins=True, export_morph=False,
+        export_skins=True, export_morph=True,
         export_draco_mesh_compression_enable=False)
     print('>>> Xong: %.2f MB (nén Draco) · %.2f MB (bản nhúng)'
           % (os.path.getsize(out) / 1048576, os.path.getsize(web) / 1048576))

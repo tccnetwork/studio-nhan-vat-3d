@@ -208,6 +208,7 @@ dl.facts dd {
         <dt>đỉnh</dt><dd>12 492</dd>
         <dt>vật liệu</dt><dd>3 → 17</dd>
         <dt>mũi tên</dt><dd>bay khi bắn</dd>
+        <dt>khẩu hình</dt><dd>0 → 2</dd>
         <dt>texture</dt><dd>0</dd>
         <dt>xương</dt><dd>87</dd>
         <dt>clip Mixamo</dt><dd>7 → 4</dd>
@@ -217,7 +218,7 @@ dl.facts dd {
   </div>
 
   <section class="notes card">
-    <h2>Bảy chỗ phải gỡ</h2>
+    <h2>Tám chỗ phải gỡ</h2>
     <ol>
       <li><b>Bảy món quần áo dùng chung một vật liệu.</b> Không có texture thì áo,
       giáp, mũ, quần, giày, ống tên và ống tay thành một khối màu duy nhất. Tách
@@ -241,6 +242,14 @@ dl.facts dd {
       sẵn trong ống chứ không đặt số cứng. Tiện thể bỏ
       <span class="num">2</span> clip trùng lặp hoàn toàn — kiểm ở mức dữ liệu thì
       chúng giống hệt nhau ở cả <span class="num">264</span> kênh.</li>
+
+      <li><b>Không có một khẩu hình nào</b> để chớp mắt hay mỉm cười — model
+      trắng trơn, khác hẳn nhân vật VRoid vốn có 57 cái. Đã nặn hai cái từ chính
+      hình học: đầu có <span class="num">4432</span> đỉnh nên thừa mật độ.
+      <i>Nhắm mắt</i> kéo <span class="num">451</span> đỉnh mí về đường ngang
+      giữa mắt; <i>mỉm cười</i> nâng <span class="num">908</span> đỉnh quanh hai
+      khoé miệng. Vùng ảnh hưởng của nụ cười phải là hình bầu dục rộng ngang hẹp
+      dọc — dùng hình tròn thì nó với lên tới cánh mũi và kéo méo mũi.</li>
 
       <li><b>Bốn đoạn là một bộ động tác game: đứng yên · gục ngã · bắn cung ·
       trúng đòn.</b> Tôi đọc sai tên cả bốn hai lần liền — đoán theo cao độ bàn
@@ -312,7 +321,7 @@ rim.position.set(-0.4, 2.2, -3.2);
 scene.add(rim);
 scene.add(new THREE.HemisphereLight(0xbcd0e8, 0x2a2a20, 0.55 * L));
 
-let mixer = null, model = null, current = null;
+let mixer = null, model = null, current = null, blinkClips = [], blinkAction = null;
 const originals = new Map();          // vật liệu thật, để bật lại sau khi xem bản gốc
 // Đúng màu Blender dùng để báo "không tìm thấy ảnh".
 const missing = new THREE.MeshStandardMaterial({ color: 0xd633c8, roughness: 0.85 });
@@ -335,8 +344,14 @@ loader.load(MODEL, gltf => {
   controls.update();
 
   mixer = new THREE.AnimationMixer(model);
+  // Chớp mắt nằm ở clip riêng vì bộ xuất glTF đặt tên animation theo tên
+  // action, mà hai action không thể trùng tên trong Blender nên không gộp
+  // được vào clip thân. Ở đây phát kèm: chọn "03_BanCung" thì chạy luôn
+  // "blink_03_BanCung".
+  blinkClips = gltf.animations.filter(c => c.name.startsWith('blink_'));
   const box_ = document.getElementById('clips');
-  gltf.animations.forEach((clip, i) => {
+  const bodyClips = gltf.animations.filter(c => !c.name.startsWith('blink_'));
+  bodyClips.forEach((clip, i) => {
     const b = document.createElement('button');
     // Tên clip có nghĩa hơn độ dài, sau khi đã cắt clip dài thành bốn đoạn.
     const nice = { '01_DungYen': 'Đứng yên', '02_GucNga': '💀 Gục ngã',
@@ -345,12 +360,13 @@ loader.load(MODEL, gltf => {
                   + '  ' + clip.duration.toFixed(1) + 's';
     b.addEventListener('click', () => play(clip, b));
     box_.appendChild(b);
-    if (i === gltf.animations.length - 1) play(clip, b);
+    if (i === bodyClips.length - 1) play(clip, b);
   });
   const stop = document.createElement('button');
   stop.textContent = '⏸ Đứng yên';
   stop.addEventListener('click', () => {
     if (current) current.stop();
+    if (blinkAction) { blinkAction.stop(); blinkAction = null; }
     current = null;
     [...box_.children].forEach(c => c.classList.remove('on'));
     stop.classList.add('on');
@@ -366,6 +382,10 @@ function play(clip, btn) {
   if (current && current !== next) current.fadeOut(0.25);
   next.reset().fadeIn(0.25).play();
   current = next;
+  if (blinkAction) blinkAction.stop();
+  const bc = blinkClips.find(c => c.name === 'blink_' + clip.name);
+  blinkAction = bc ? mixer.clipAction(bc) : null;
+  if (blinkAction) blinkAction.reset().play();
   [...btn.parentNode.children].forEach(c => c.classList.remove('on'));
   btn.classList.add('on');
 }
