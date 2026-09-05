@@ -55,6 +55,11 @@ BONE_MAP = [
 # Xương đầu không có khớp con thật (BVH kết thúc bằng End Site rỗng), nên không
 # bám hướng được; nó giữ nguyên tư thế so với cổ.
 
+# Tên xương gốc của bộ xương NGUỒN. Bộ mocap BVH của dự án gọi nó là "Hips",
+# còn rig Mixamo gọi là "mixamorig:Hips" — đổi biến này là chuyển nguồn được,
+# không phải sửa bốn chỗ rải rác trong retarget().
+SRC_ROOT = 'Hips'
+
 BVH_TO_METRE = 0.01
 
 
@@ -633,7 +638,7 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
         # Căn theo chiều cao hông thay vì đoán: hai bộ xương lệch nhau vài phần trăm.
         scene.frame_set(first)
         bpy.context.view_layer.update()
-        bvh_hip = (bvh_arm.matrix_world @ bvh_arm.pose.bones['Hips'].head).z
+        bvh_hip = (bvh_arm.matrix_world @ bvh_arm.pose.bones[SRC_ROOT].head).z
         char_hip = (char_arm.matrix_world
                     @ char_arm.data.bones['J_Bip_C_Hips'].head_local).z
         scale = char_hip / bvh_hip if bvh_hip else BVH_TO_METRE
@@ -655,13 +660,13 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
     for f in range(first, last + 1):
         scene.frame_set(f)
         bpy.context.view_layer.update()
-        hips_y.append((bvh_arm.matrix_world @ bvh_arm.pose.bones['Hips'].head).y * scale)
+        hips_y.append((bvh_arm.matrix_world @ bvh_arm.pose.bones[SRC_ROOT].head).y * scale)
     span_n = max(1, len(hips_y) - 1)
     drift = (hips_y[-1] - hips_y[0]) / span_n
 
     scene.frame_set(first)
     bpy.context.view_layer.update()
-    origin = (bvh_arm.matrix_world @ bvh_arm.pose.bones['Hips'].head) * scale
+    origin = (bvh_arm.matrix_world @ bvh_arm.pose.bones[SRC_ROOT].head) * scale
 
     lowest = []
     out_frame = 0
@@ -671,7 +676,7 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
         bpy.context.view_layer.update()
 
         # --- gốc: đặt hông ---
-        hip_world = (bvh_arm.matrix_world @ bvh_arm.pose.bones['Hips'].head) * scale
+        hip_world = (bvh_arm.matrix_world @ bvh_arm.pose.bones[SRC_ROOT].head) * scale
         delta = hip_world - origin
         if in_place:
             # Chỉ trừ đi phần đi tới đều, giữ lại dao động trước sau của hông.
