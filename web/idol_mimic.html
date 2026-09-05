@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cô Ca Sĩ Học Bắn Cung</title>
+<title>Cô Ca Sĩ Học Nghề</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root {
@@ -92,6 +92,12 @@ h1 em { font-style: italic; font-weight: 400; color: var(--rose); }
 }
 #tag-l { left: 12px; border-left: 3px solid var(--moss); }
 #tag-r { right: 12px; border-left: 3px solid var(--rose); }
+#busy {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  font: 400 12px/1 "IBM Plex Mono", ui-monospace, monospace; color: var(--muted);
+  background: var(--panel); padding: 8px 12px; border-radius: 6px;
+  border: 1px solid var(--line);
+}
 #hint {
   position: absolute; left: 12px; bottom: 10px;
   font: 400 11.5px/1 "IBM Plex Mono", ui-monospace, monospace;
@@ -182,10 +188,11 @@ table.rig td.arr { color: var(--muted); padding: 3px 6px; }
 
 <div class="wrap">
   <header>
-    <h1>Cô Ca Sĩ <em>học bắn cung</em></h1>
-    <p class="sub">Năm động tác của cung thủ Erika được chuyển sang bộ xương của cô ca sĩ.
-    Hai rig khác chuẩn hoàn toàn — <span class="num">87</span> xương Mixamo so với
-    <span class="num">154</span> xương VRoid — nên không chép thẳng được, phải dựng lại
+    <h1>Cô Ca Sĩ <em>học nghề</em></h1>
+    <p class="sub">Mười một động tác của hai nhân vật Mixamo — cung thủ Erika và hiệp sĩ
+    thập tự — được chuyển sang bộ xương của cô ca sĩ, kèm theo cả đồ nghề. Hai chuẩn rig
+    khác nhau hoàn toàn (<span class="num">86–87</span> xương Mixamo so với
+    <span class="num">154</span> xương VRoid) nên không chép thẳng được, phải dựng lại
     từng khung theo hướng nối các khớp. Bấm một động tác để hai người diễn cùng lúc.</p>
   </header>
 
@@ -193,11 +200,24 @@ table.rig td.arr { color: var(--muted); padding: 3px 6px; }
     <div id="loading">đang tải hai mô hình…</div>
     <div class="tag" id="tag-l">Erika · nguồn</div>
     <div class="tag" id="tag-r">Ca sĩ · bắt chước</div>
+    <div class="pill" id="busy" hidden>đang nạp…</div>
     <div id="hint">kéo · xoay &nbsp;|&nbsp; cuộn · phóng</div>
     <div id="clock">—</div>
   </div>
 
   <div class="rail">
+    <div class="card">
+      <h2>Nguồn động tác</h2>
+      <div class="btns">
+        <button id="src-cungthu" class="on">🏹 Cung thủ</button>
+        <button id="src-kiemsi">⚔️ Hiệp sĩ</button>
+      </div>
+      <p style="margin:9px 0 0;font-size:11.5px;color:var(--muted)">
+        Cùng một đường chuyển, khác mỗi bảng cấu hình: file nguồn, mốc tại chỗ
+        của từng clip, và món nào cầm ở tay nào.
+      </p>
+    </div>
+
     <div class="card">
       <h2>Động tác</h2>
       <div class="btns" id="clips"></div>
@@ -238,7 +258,7 @@ table.rig td.arr { color: var(--muted); padding: 3px 6px; }
       <div class="btns">
         <button id="btn-both" class="on">Cả hai</button>
         <button id="btn-idol">Chỉ ca sĩ</button>
-        <button id="btn-archer">Chỉ Erika</button>
+        <button id="btn-archer">Chỉ nguồn</button>
       </div>
     </div>
 
@@ -266,11 +286,13 @@ table.rig td.arr { color: var(--muted); padding: 3px 6px; }
         <dt>xương nguồn</dt><dd>87</dd>
         <dt>xương đích</dt><dd>154</dd>
         <dt>tỉ lệ chiều dài</dt><dd>0,89–0,97</dd>
-        <dt>clip chuyển được</dt><dd>5 / 5</dd>
-        <dt>tổng số khung</dt><dd>198</dd>
-        <dt>khoá bàn chân</dt><dd>172 lượt</dd>
+        <dt>clip chuyển được</dt><dd>11 / 11</dd>
+        <dt>đồ mang sang</dt><dd>4 món</dd>
         <dt>trục ghim thêm</dt><dd>5</dd>
-        <dt>GLB nén Draco</dt><dd>4,53 MB</dd>
+        <dt>tỉ lệ cung thủ</dt><dd>0,86</dd>
+        <dt>tỉ lệ hiệp sĩ</dt><dd>0,82</dd>
+        <dt>GLB cung thủ</dt><dd>4,53 MB</dd>
+        <dt>GLB hiệp sĩ</dt><dd>4,71 MB</dd>
       </dl>
     </div>
   </div>
@@ -356,9 +378,29 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
-const ARCHER = '../build/char6/char6.glb';
-const IDOL   = '../build/idol_mimic/idol_mimic.glb';
-const DRACO_PATH = 'vendor/draco/';
+// Hai bộ nguồn dùng chung đúng một đường chuyển; ở đây chỉ khác file và tên clip.
+const SETS = {
+  cungthu: {
+    tag: 'Erika · nguồn',
+    src:   '../build/char6/char6.glb',
+    mimic: '../build/idol_mimic/idol_mimic.glb',
+    prefix: 'mimic_',
+    first: '04_BanCung',
+    nice: { '01_DungYen': 'Đứng yên', '02_DiChuyen': 'Di chuyển',
+            '03_GucNga': '💀 Gục ngã', '04_BanCung': '🏹 Bắn cung',
+            '05_TrungDon': '💥 Trúng đòn' },
+  },
+  kiemsi: {
+    tag: 'Hiệp sĩ · nguồn',
+    src:   '../build/char4/char4.glb',
+    mimic: '../build/idol_mimic/idol_knight.glb',
+    prefix: 'knight_',
+    first: '04_ChemNgang',
+    nice: { '01_ThuThe': '🛡 Thủ thế', '02_DiBo': 'Đi bộ',
+            '03_GucNga': '💀 Gục ngã', '04_ChemNgang': '⚔️ Chém ngang',
+            '05_NhayChem': '🌀 Nhảy chém', '06_DamThang': '🗡️ Đâm thẳng' },
+  },
+};
 const GAP = 0.62;                      // nửa khoảng cách giữa hai người, mét
 
 const stage = document.getElementById('stage');
@@ -378,40 +420,35 @@ controls.minDistance = 1.4;
 controls.maxDistance = 9;
 
 // Từ r155 three.js tính ánh sáng theo đơn vị vật lý, hệ số PI nhân ngầm trước
-// đây đã bị bỏ — phải nhân lại, không thì cảnh tối hơn ~3,14 lần.
+// đây đã bị bỏ — phải nhân lại, không thì cảnh tối hơn ~3,14 lần. Giáp thép là
+// vật liệu kim loại hoàn toàn, nó chỉ có màu nhờ phản chiếu nên cần cả đèn vòm
+// lẫn đèn viền.
 const L = Math.PI;
-const key = new THREE.DirectionalLight(0xfff3e2, 2.1 * L);
+const key = new THREE.DirectionalLight(0xfff3e2, 2.2 * L);
 key.position.set(2.4, 3.0, 2.6); scene.add(key);
-const fill = new THREE.DirectionalLight(0xd8e4ff, 0.75 * L);
+const fill = new THREE.DirectionalLight(0xd8e4ff, 0.8 * L);
 fill.position.set(-2.6, 1.4, 1.8); scene.add(fill);
-const rim = new THREE.DirectionalLight(0xffffff, 1.15 * L);
+const rim = new THREE.DirectionalLight(0xffffff, 1.4 * L);
 rim.position.set(-0.4, 2.2, -3.2); scene.add(rim);
-scene.add(new THREE.HemisphereLight(0xbcd0e8, 0x2a2a20, 0.55 * L));
-
-const NICE = { '01_DungYen': 'Đứng yên', '02_DiChuyen': 'Di chuyển',
-               '03_GucNga': '💀 Gục ngã', '04_BanCung': '🏹 Bắn cung',
-               '05_TrungDon': '💥 Trúng đòn' };
+scene.add(new THREE.HemisphereLight(0xbcd0e8, 0x2a2a20, 0.8 * L));
 
 const draco = new DRACOLoader();
-draco.setDecoderPath(DRACO_PATH);
+draco.setDecoderPath('vendor/draco/');
 const loader = new GLTFLoader();
 loader.setDRACOLoader(draco);
 
-const side = {};      // { archer: {...}, idol: {...} }
-let rate = 1.0, current = null;
+const cache = {};                  // bộ nào đã nạp thì giữ lại, đổi qua lại không nạp lại
+let cur = null, current = null, rate = 1.0;
+let inPlaceMode = true, evenMode = true, showLeft = true, showRight = true;
 
-function loadOne(url, who, x) {
+function loadOne(url, x) {
   return new Promise((res, rej) => loader.load(url, gltf => {
     const root = gltf.scene;
     root.position.x = x;
     scene.add(root);
     const mixer = new THREE.AnimationMixer(root);
     const clips = new Map();
-    for (const c of gltf.animations) {
-      // Bên ca sĩ mọi clip mang tiền tố mimic_, bỏ đi để hai bên khớp khoá.
-      clips.set(c.name.replace(/^mimic_/, ''), c);
-    }
-    // Xương gốc của rig, để khử phương ngang khi chạy tại chỗ.
+    for (const c of gltf.animations) clips.set(c.name.replace(/^(mimic|knight)_/, ''), c);
     let hips = null, head = null;
     root.traverse(o => {
       if (!hips && /Hips$/.test(o.name)) hips = o;
@@ -420,26 +457,72 @@ function loadOne(url, who, x) {
     root.updateMatrixWorld(true);
     const tall = head
       ? new THREE.Vector3().setFromMatrixPosition(head.matrixWorld).y : 0;
-    side[who] = { root, mixer, clips, hips, tall, place: new Map(), action: null };
-    res(side[who]);
+    res({ root, mixer, clips, hips, tall, place: new Map(), action: null });
   }, undefined, rej));
 }
 
-Promise.all([
-  loadOne(ARCHER, 'archer', -GAP),
-  loadOne(IDOL,   'idol',    GAP),
-]).then(() => {
+async function loadSet(name) {
+  if (cache[name]) return cache[name];
+  const busy = document.getElementById('busy');
+  busy.hidden = false;
+  const cfg = SETS[name];
+  const [archer, idol] = await Promise.all([
+    loadOne(cfg.src, -GAP), loadOne(cfg.mimic, GAP),
+  ]);
   // Khuôn mặt Erika là một clip 18 giây lặp riêng, không dính clip thân.
-  const face = [...side.archer.clips.keys()].find(n => n.startsWith('Mat_'));
-  if (face) {
-    side.archer.face = side.archer.clips.get(face);
-    side.archer.mixer.clipAction(side.archer.face).play();
+  const face = [...archer.clips.keys()].find(n => n.startsWith('Mat_'));
+  if (face) archer.face = archer.clips.get(face);
+  const set = { cfg, archer, idol };
+  for (const w of ['archer', 'idol']) set[w].root.visible = false;
+  cache[name] = set;
+  busy.hidden = true;
+  return set;
+}
+
+async function activate(name) {
+  for (const k of Object.keys(SETS)) {
+    document.getElementById('src-' + k).classList.toggle('on', k === name);
   }
+  if (cur) for (const w of ['archer', 'idol']) {
+    cur[w].mixer.stopAllAction();
+    cur[w].action = null;
+    cur[w].root.visible = false;
+  }
+  const set = await loadSet(name);
+  cur = set;
+  document.getElementById('tag-l').textContent = set.cfg.tag;
+  if (set.archer.face) set.archer.mixer.clipAction(set.archer.face).play();
 
-  setEven(true);
+  setEven(evenMode);
+  frame();
 
+  const names = [...set.idol.clips.keys()]
+    .filter(n => set.archer.clips.has(n)).sort();
+  const bar = document.getElementById('clips');
+  bar.textContent = '';
+  let firstBtn = null;
+  names.forEach(n => {
+    const b = document.createElement('button');
+    b.textContent = (set.cfg.nice[n] || n) + '  '
+                  + set.idol.clips.get(n).duration.toFixed(1) + 's';
+    b.dataset.clip = n;
+    b.addEventListener('click', () => play(n, b));
+    bar.appendChild(b);
+    if (n === set.cfg.first || (!firstBtn && !names.includes(set.cfg.first))) firstBtn = b;
+  });
+  show(showLeft, showRight);
+  if (firstBtn) play(firstBtn.dataset.clip, firstBtn);
+  const load = document.getElementById('loading');
+  if (load) load.remove();
+}
+
+function frame() {
   const box = new THREE.Box3();
-  for (const w of ['archer', 'idol']) box.union(new THREE.Box3().setFromObject(side[w].root));
+  for (const w of ['archer', 'idol']) {
+    cur[w].root.visible = true;
+    box.union(new THREE.Box3().setFromObject(cur[w].root));
+  }
+  show(showLeft, showRight);
   const size = box.getSize(new THREE.Vector3());
   const mid = box.getCenter(new THREE.Vector3());
   controls.target.set(0, mid.y, 0);
@@ -448,32 +531,16 @@ Promise.all([
   const need = Math.max(size.y * 1.75, size.x * 1.75 / camera.aspect);
   camera.position.set(0, mid.y + size.y * 0.05, need);
   controls.update();
+}
 
-  // Chỉ dựng nút cho clip thân mà CẢ HAI bên đều có.
-  const names = [...side.idol.clips.keys()].filter(n => side.archer.clips.has(n)).sort();
-  const bar = document.getElementById('clips');
-  names.forEach((name, i) => {
-    const b = document.createElement('button');
-    const d = side.idol.clips.get(name).duration;
-    b.textContent = (NICE[name] || name) + '  ' + d.toFixed(1) + 's';
-    b.addEventListener('click', () => play(name, b));
-    bar.appendChild(b);
-    if (name === '04_BanCung' || (i === names.length - 1 && !current)) play(name, b);
-  });
-  document.getElementById('loading').remove();
-}).catch(err => {
-  document.getElementById('loading').textContent = 'không tải được: ' + err;
-});
-
-// Bỏ phần đi tới của hông, giữ lại phần lên xuống. Hai rig có hệ trục gốc
-// khác nhau — Mixamo còn kèm tỉ lệ 0,01 — nên không thể xoá cứng một thành
-// phần toạ độ; phải hỏi ma trận thế giới xem trục nào là trục đứng.
+// Bỏ phần đi tới của hông, giữ lại phần lên xuống. Hai rig có hệ trục gốc khác
+// nhau — Mixamo còn kèm tỉ lệ 0,01 — nên không thể xoá cứng một thành phần toạ
+// độ; phải hỏi ma trận thế giới xem trục nào là trục đứng.
 function inPlace(s, clip) {
   if (!s.hips) return clip;
   if (s.place.has(clip.name)) return s.place.get(clip.name);
   const key = s.hips.name + '.position';
-  const src = clip.tracks.find(t => t.name === key);
-  if (!src) { s.place.set(clip.name, clip); return clip; }
+  if (!clip.tracks.find(t => t.name === key)) { s.place.set(clip.name, clip); return clip; }
   const c = clip.clone();
   const tr = c.tracks.find(t => t.name === key);
   const inv = new THREE.Matrix4().copy(s.hips.parent.matrixWorld).invert();
@@ -491,12 +558,10 @@ function inPlace(s, clip) {
   return c;
 }
 
-let inPlaceMode = true;
-
 function play(name, btn) {
   // Hai mixer riêng nhưng cùng nhận một delta mỗi khung, nên chạy khớp nhau.
   for (const w of ['archer', 'idol']) {
-    const s = side[w];
+    const s = cur[w];
     let clip = s.clips.get(name);
     if (!clip) continue;
     if (inPlaceMode) clip = inPlace(s, clip);
@@ -506,47 +571,72 @@ function play(name, btn) {
     s.action = next;
   }
   current = name;
-  if (btn) {
-    [...btn.parentNode.children].forEach(c => c.classList.remove('on'));
-    btn.classList.add('on');
-  }
+  const bar = document.getElementById('clips');
+  [...bar.children].forEach(c => c.classList.toggle('on', c === btn));
+}
+
+function replay() {
+  const bar = document.getElementById('clips');
+  const btn = [...bar.children].find(c => c.dataset.clip === current);
+  if (btn) play(current, btn);
 }
 
 function setPlace(on) {
   inPlaceMode = on;
   document.getElementById('btn-place').classList.toggle('on', on);
   document.getElementById('btn-free').classList.toggle('on', !on);
+  if (!cur) return;
   for (const w of ['archer', 'idol']) {
-    if (!side[w]) continue;
-    side[w].mixer.stopAllAction();
-    side[w].action = null;
+    cur[w].mixer.stopAllAction();
+    cur[w].action = null;
     // stopAllAction tắt cả clip khuôn mặt 18 giây, phải bật lại.
-    if (side[w].face) side[w].mixer.clipAction(side[w].face).play();
+    if (cur[w].face) cur[w].mixer.clipAction(cur[w].face).play();
   }
-  if (current) play(current, null);
+  replay();
 }
-// Cô ca sĩ thấp hơn Erika; phóng cô ấy lên cho hai người ngang nhau thì so
-// tư thế dễ hơn nhiều. Đo bằng cao độ khớp đầu chứ không dùng hộp bao — cung
-// chìa lên quá đỉnh đầu, hộp bao sẽ đo ra chiều cao của cung.
+document.getElementById('btn-place').addEventListener('click', () => setPlace(true));
+document.getElementById('btn-free').addEventListener('click', () => setPlace(false));
+
+// Cô ca sĩ thấp hơn cả hai nhân vật nguồn; phóng cô ấy lên cho ngang nhau thì
+// so tư thế dễ hơn nhiều. Đo bằng cao độ khớp đầu chứ không dùng hộp bao — cung
+// và kiếm chìa lên quá đỉnh đầu, hộp bao sẽ đo ra chiều cao của vũ khí.
 function setEven(on) {
+  evenMode = on;
   document.getElementById('btn-even').classList.toggle('on', on);
   document.getElementById('btn-true').classList.toggle('on', !on);
-  if (!side.archer || !side.idol) return;
-  const k = (on && side.idol.tall > 0) ? side.archer.tall / side.idol.tall : 1;
-  side.idol.root.scale.setScalar(k);
+  if (!cur) return;
+  const k = (on && cur.idol.tall > 0) ? cur.archer.tall / cur.idol.tall : 1;
+  cur.idol.root.scale.setScalar(k);
   document.getElementById('ratio-note').textContent = on
     ? 'Cô ca sĩ được phóng ×' + k.toFixed(2).replace('.', ',')
-      + ' cho ngang tầm Erika. Đo bằng cao độ khớp đầu, không dùng hộp bao —'
-      + ' cây cung chìa lên quá đỉnh đầu thì hộp bao đo ra chiều cao của cung.'
+      + ' cho ngang tầm nhân vật nguồn. Đo bằng cao độ khớp đầu, không dùng hộp'
+      + ' bao — vũ khí chìa lên quá đỉnh đầu thì hộp bao đo ra chiều cao vũ khí.'
     : 'Đúng tỉ lệ gốc: khớp đầu cô ca sĩ ở '
-      + side.idol.tall.toFixed(2).replace('.', ',') + ' m, Erika ở '
-      + side.archer.tall.toFixed(2).replace('.', ',') + ' m.';
+      + cur.idol.tall.toFixed(2).replace('.', ',') + ' m, nhân vật nguồn ở '
+      + cur.archer.tall.toFixed(2).replace('.', ',') + ' m.';
 }
 document.getElementById('btn-even').addEventListener('click', () => setEven(true));
 document.getElementById('btn-true').addEventListener('click', () => setEven(false));
 
-document.getElementById('btn-place').addEventListener('click', () => setPlace(true));
-document.getElementById('btn-free').addEventListener('click', () => setPlace(false));
+function show(left, right) {
+  showLeft = left; showRight = right;
+  if (cur) {
+    cur.archer.root.visible = left;
+    cur.idol.root.visible = right;
+  }
+  document.getElementById('tag-l').style.opacity = left ? 1 : 0;
+  document.getElementById('tag-r').style.opacity = right ? 1 : 0;
+  document.getElementById('btn-both').classList.toggle('on', left && right);
+  document.getElementById('btn-idol').classList.toggle('on', !left && right);
+  document.getElementById('btn-archer').classList.toggle('on', left && !right);
+}
+document.getElementById('btn-both').addEventListener('click', () => show(true, true));
+document.getElementById('btn-idol').addEventListener('click', () => show(false, true));
+document.getElementById('btn-archer').addEventListener('click', () => show(true, false));
+
+for (const k of Object.keys(SETS)) {
+  document.getElementById('src-' + k).addEventListener('click', () => activate(k));
+}
 
 const rateEl = document.getElementById('rate');
 const rateOut = document.getElementById('rate-out');
@@ -554,19 +644,6 @@ rateEl.addEventListener('input', () => {
   rate = rateEl.value / 100;
   rateOut.textContent = rate.toFixed(2).replace('.', ',') + '×';
 });
-
-function show(archer, idol) {
-  if (side.archer) side.archer.root.visible = archer;
-  if (side.idol) side.idol.root.visible = idol;
-  document.getElementById('tag-l').style.opacity = archer ? 1 : 0;
-  document.getElementById('tag-r').style.opacity = idol ? 1 : 0;
-  document.getElementById('btn-both').classList.toggle('on', archer && idol);
-  document.getElementById('btn-idol').classList.toggle('on', !archer && idol);
-  document.getElementById('btn-archer').classList.toggle('on', archer && !idol);
-}
-document.getElementById('btn-both').addEventListener('click', () => show(true, true));
-document.getElementById('btn-idol').addEventListener('click', () => show(false, true));
-document.getElementById('btn-archer').addEventListener('click', () => show(true, false));
 
 function resize() {
   const w = stage.clientWidth, h = stage.clientHeight;
@@ -582,12 +659,19 @@ const clockEl = document.getElementById('clock');
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta() * rate;
-  for (const w of ['archer', 'idol']) if (side[w]) side[w].mixer.update(dt);
-  const a = side.idol && side.idol.action;
+  if (cur) for (const w of ['archer', 'idol']) cur[w].mixer.update(dt);
+  const a = cur && cur.idol.action;
   if (a) clockEl.textContent = a.time.toFixed(2).replace('.', ',') + ' / '
                              + a.getClip().duration.toFixed(2).replace('.', ',') + ' s';
   controls.update();
   renderer.render(scene, camera);
+});
+
+// ?nguon=kiemsi để mở thẳng bộ hiệp sĩ — tiện gửi link tới đúng bộ muốn xem.
+const want = new URLSearchParams(location.search).get('nguon');
+activate(SETS[want] ? want : 'cungthu').catch(err => {
+  const load = document.getElementById('loading');
+  if (load) load.textContent = 'không tải được: ' + err;
 });
 </script>
 </body>

@@ -1,8 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Chuyển năm động tác của cung thủ char6 sang bộ xương của cô ca sĩ.
+"""Chuyển động tác của một nhân vật Mixamo sang bộ xương của cô ca sĩ.
 
     /Applications/Blender.app/Contents/MacOS/Blender --background \
-        --factory-startup --python scripts/build_idol_mimic.py
+        --factory-startup --python scripts/build_idol_mimic.py -- cungthu
+    /Applications/Blender.app/Contents/MacOS/Blender --background \
+        --factory-startup --python scripts/build_idol_mimic.py -- kiemsi
+
+Hai nguồn dùng chung đúng một đường: cùng bảng ánh xạ xương, cùng phép ghim
+trục thứ hai, cùng cách mang đồ cầm tay sang. Khác nhau chỉ ở bảng cấu hình
+SOURCES bên dưới — file nguồn, mốc tại chỗ của từng clip, và món nào cầm ở tay
+nào.
 
 Hai bộ xương khác chuẩn hoàn toàn: char6 dùng rig Mixamo 87 xương
 (mixamorig:*), cô ca sĩ dùng rig VRoid 154 xương (J_Bip_*). Không chép thẳng
@@ -58,59 +65,95 @@ MIXAMO_MAP = [
 
 # Đoạn nào đứng tại chỗ thì khử luôn phần đi tới, đoạn nào cố ý di chuyển thì
 # giữ. Đoạn gục ngã bắt buộc phải giữ, vì cả động tác là ngã xuống đất.
-IN_PLACE = {
-    '01_DungYen': True,
-    '02_DiChuyen': False,
-    '03_GucNga': False,
-    '04_BanCung': True,
-    '05_TrungDon': True,
+SOURCES = {
+    'cungthu': {
+        'ten': 'cung thủ Erika',
+        'glb': os.path.join(ROOT, 'build', 'char6', 'char6.glb'),
+        'ra': 'idol_mimic.glb',
+        'dau': 'mimic_',
+        # Đoạn nào đứng tại chỗ thì khử luôn phần đi tới, đoạn nào cố ý di
+        # chuyển thì giữ. Đoạn gục ngã bắt buộc phải giữ, vì cả động tác là ngã
+        # xuống đất.
+        'tai_cho': {'01_DungYen': True, '02_DiChuyen': False,
+                    '03_GucNga': False, '04_BanCung': True,
+                    '05_TrungDon': True},
+        # Khoá bàn chân xuống sàn chỉ hợp với đoạn đứng; đoạn ngã và đoạn chạy
+        # thì không, vì chân vốn rời sàn.
+        'khoa_chan': {'01_DungYen', '04_BanCung', '05_TrungDon'},
+        'do': [
+            {'ten': 'cung', 'luoi': 'bow',
+             'xuong': [M + 'Left_arch1', M + 'Left_arch2', M + 'Left_arch2_end'],
+             'doi_ten': ['Bow_arch1', 'Bow_arch2', 'Bow_arch2_end'],
+             'cha': 'J_Bip_L_Hand', 'he_truc': 'tay_trai', 'chep_xoay': True},
+            {'ten': 'ống tên', 'luoi': 'arrow_box',
+             'xuong': [M + 'Spine2'], 'doi_ten': ['Quiver'],
+             'cha': 'J_Bip_C_UpperChest', 'he_truc': 'than',
+             'chep_xoay': False, 'gan_cung': True},
+        ],
+    },
+    'kiemsi': {
+        'ten': 'hiệp sĩ thập tự',
+        'glb': os.path.join(ROOT, 'build', 'char4', 'char4.glb'),
+        'ra': 'idol_knight.glb',
+        'dau': 'knight_',
+        # Đo gốc di chuyển từng clip rồi mới đặt: đi bộ lệch xa nhất 0,56 m,
+        # gục ngã 1,25 m và hông rơi xuống -0,79 m, nhảy chém hông vọt lên
+        # +0,97 m. Ba đoạn ấy phải giữ nguyên phần đi tới.
+        'tai_cho': {'01_ThuThe': True, '02_DiBo': False, '03_GucNga': False,
+                    '04_ChemNgang': True, '05_NhayChem': False,
+                    '06_DamThang': True},
+        'khoa_chan': {'01_ThuThe', '04_ChemNgang'},
+        'do': [
+            {'ten': 'kiếm', 'luoi': 'sword',
+             'xuong': [M + 'Sword_joint', M + 'Sword_joint_end'],
+             'doi_ten': ['Sword_joint', 'Sword_joint_end'],
+             'cha': 'J_Bip_R_Hand', 'he_truc': 'tay_phai', 'chep_xoay': True},
+            # Khiên vốn treo vào cẳng tay, nhưng ở đây gắn vào BÀN TAY. Góc vặn
+            # của cẳng tay không được ghim trong phép chuyển, còn bàn tay thì
+            # có — treo vào cẳng tay là mặt khiên quay lung tung.
+            {'ten': 'khiên', 'luoi': 'shield',
+             'xuong': [M + 'Shield_joint', M + 'Shield_joint_end'],
+             'doi_ten': ['Shield_joint', 'Shield_joint_end'],
+             'cha': 'J_Bip_L_Hand', 'he_truc': 'tay_trai', 'chep_xoay': True},
+        ],
+    },
 }
-# Khoá bàn chân xuống sàn chỉ hợp với đoạn đứng; đoạn ngã và đoạn chạy thì
-# không, vì chân vốn rời sàn.
-LOCK_FEET = {'01_DungYen', '04_BanCung', '05_TrungDon'}
 
+# Hệ trục dựng từ giải phẫu chứ không lấy hướng xương lúc nghỉ: hai rig đặt
+# xương lúc nghỉ khác nhau, lấy hướng ấy thì đồ cầm tay xoay ngang.
+FRAMES = {
+    'tay_trai': ((M + 'LeftHand', M + 'LeftHandMiddle1',
+                  M + 'LeftHandIndex1', M + 'LeftHandPinky1'),
+                 ('J_Bip_L_Hand', 'J_Bip_L_Middle1',
+                  'J_Bip_L_Index1', 'J_Bip_L_Little1')),
+    'tay_phai': ((M + 'RightHand', M + 'RightHandMiddle1',
+                  M + 'RightHandIndex1', M + 'RightHandPinky1'),
+                 ('J_Bip_R_Hand', 'J_Bip_R_Middle1',
+                  'J_Bip_R_Index1', 'J_Bip_R_Little1')),
+    'than':     ((M + 'Spine2', M + 'Neck', M + 'LeftArm', M + 'RightArm'),
+                 ('J_Bip_C_UpperChest', 'J_Bip_C_Neck',
+                  'J_Bip_L_UpperArm', 'J_Bip_R_UpperArm')),
+}
 
-BOW_MESH = 'bow'
-# Cung skin vào chuỗi xương riêng treo vào bàn tay trái, không nằm trong bảng
-# ánh xạ. Chép nguyên chuỗi ấy sang rig cô ca sĩ.
-BOW_BONES = [M + 'Left_arch1', M + 'Left_arch2', M + 'Left_arch2_end']
-BOW_RENAME = {M + 'Left_arch1': 'Bow_arch1',
-              M + 'Left_arch2': 'Bow_arch2',
-              M + 'Left_arch2_end': 'Bow_arch2_end'}
-# Hệ trục bàn tay dựng từ giải phẫu chứ không lấy hướng xương lúc nghỉ: hai rig
-# đặt bàn tay lúc nghỉ khác nhau, lấy hướng ấy thì cung xoay ngang.
-HAND_SRC = (M + 'LeftHand', M + 'LeftHandMiddle1',
-            M + 'LeftHandIndex1', M + 'LeftHandPinky1')
-HAND_DST = ('J_Bip_L_Hand', 'J_Bip_L_Middle1',
-            'J_Bip_L_Index1', 'J_Bip_L_Little1')
+IDOL = os.path.join(ROOT, 'source', 'female_singer_anime_idol_base.glb')
+OUT_DIR = os.path.join(ROOT, 'build', 'idol_mimic')
 
 
 def local_frame(arm, names):
     """Hệ trục trực chuẩn dựng từ bốn khớp: gốc, hướng dọc, và một cặp làm
-    hướng ngang. Dùng giải phẫu chứ không lấy hướng xương lúc nghỉ — hai rig đặt
-    xương lúc nghỉ khác nhau, lấy hướng ấy thì đồ cầm tay xoay ngang."""
-    hand, mid, idx, pky = names
+    hướng ngang."""
+    a, b, c, d = names
     w = arm.matrix_world
-    p = w @ arm.data.bones[hand].head_local
-    u = (w @ arm.data.bones[mid].head_local) - p          # dọc lòng bàn tay
-    a = (w @ arm.data.bones[idx].head_local) - (w @ arm.data.bones[pky].head_local)
+    p = w @ arm.data.bones[a].head_local
+    u = (w @ arm.data.bones[b].head_local) - p
+    e = (w @ arm.data.bones[c].head_local) - (w @ arm.data.bones[d].head_local)
     u.normalize()
-    a = (a - u * a.dot(u)).normalized()                   # ngang, đã trực giao
-    n = u.cross(a)
-    return Matrix(((u.x, a.x, n.x, p.x),
-                   (u.y, a.y, n.y, p.y),
-                   (u.z, a.z, n.z, p.z),
+    e = (e - u * e.dot(u)).normalized()
+    n = u.cross(e)
+    return Matrix(((u.x, e.x, n.x, p.x),
+                   (u.y, e.y, n.y, p.y),
+                   (u.z, e.z, n.z, p.z),
                    (0.0, 0.0, 0.0, 1.0)))
-
-
-QUIVER_MESH = 'arrow_box'
-# Ống tên skin vào ba xương thân, nặng nhất là Spine2 (87% trọng số). Gắn cứng
-# vào một xương duy nhất là đủ: nó vốn gần như không biến dạng.
-QUIVER_ANCHOR_SRC = M + 'Spine2'
-QUIVER_ANCHOR_DST = 'J_Bip_C_UpperChest'
-TORSO_SRC = (M + 'Spine2', M + 'Neck', M + 'LeftArm', M + 'RightArm')
-TORSO_DST = ('J_Bip_C_UpperChest', 'J_Bip_C_Neck',
-             'J_Bip_L_UpperArm', 'J_Bip_R_UpperArm')
 
 
 def rig_height(arm, hips, head):
@@ -119,116 +162,80 @@ def rig_height(arm, hips, head):
             - (w @ arm.data.bones[hips].head_local)).length
 
 
-def attach_bow(idol_arm, src_arm, archer_objs):
-    """Chuyển cây cung sang tay cô ca sĩ, giữ nguyên phép skin."""
-    bow = next((o for o in archer_objs
-                if o.type == 'MESH' and o.name.startswith(BOW_MESH)), None)
-    if bow is None:
-        print('    KHÔNG tìm thấy lưới cung')
-        return [], 1.0
+def attach_prop(idol_arm, src_arm, src_objs, spec, scale):
+    """Mang một món đồ từ rig nguồn sang rig cô ca sĩ, giữ nguyên phép skin.
 
-    s = (rig_height(idol_arm, 'J_Bip_C_Hips', 'J_Bip_C_Head')
-         / rig_height(src_arm, M + 'Hips', M + 'Head'))
-    # Một phép đồng dạng đưa cả vùng bàn tay nguồn về vùng bàn tay đích. Đặt
-    # xương VÀ lưới bằng đúng phép này thì thế bind không đổi, skin giữ nguyên.
-    t = (local_frame(idol_arm, HAND_DST) @ Matrix.Scale(s, 4)
-         @ local_frame(src_arm, HAND_SRC).inverted())
-    print('    cung: tỉ lệ %.3f theo chiều cao rig' % s)
+    Một phép đồng dạng đưa cả vùng bàn tay (hoặc vùng thân) bên nguồn về vùng
+    tương ứng bên đích. Đặt xương VÀ lưới bằng đúng phép ấy thì thế bind không
+    đổi, nên không phải sơn lại trọng số gì.
+    """
+    key = spec['luoi'].lower()
+    obj = next((o for o in src_objs
+                if o.type == 'MESH' and o.name.lower().startswith(key)), None)
+    if obj is None:
+        print('    KHÔNG tìm thấy lưới %s' % spec['luoi'])
+        return []
+
+    fsrc, fdst = FRAMES[spec['he_truc']]
+    t = (local_frame(idol_arm, fdst) @ Matrix.Scale(scale, 4)
+         @ local_frame(src_arm, fsrc).inverted())
 
     ws = src_arm.matrix_world
     rest = []
-    for name in BOW_BONES:
+    for name in spec['xuong']:
         b = src_arm.data.bones[name]
-        rest.append((name,
-                     t @ (ws @ b.head_local),
-                     t @ (ws @ b.tail_local),
+        rest.append((t @ (ws @ b.head_local), t @ (ws @ b.tail_local),
                      (t.to_3x3() @ ((ws @ b.matrix_local).to_3x3()
                                     @ Vector((0.0, 0.0, 1.0)))).normalized()))
 
     bpy.context.view_layer.objects.active = idol_arm
     bpy.ops.object.mode_set(mode='EDIT')
     eb = idol_arm.data.edit_bones
-    parent = eb['J_Bip_L_Hand']
     made = []
-    for i, (name, head, tail, roll_ref) in enumerate(rest):
-        nb = eb.new(BOW_RENAME[name])
+    for i, (head, tail, roll) in enumerate(rest):
+        nb = eb.new(spec['doi_ten'][i])
         nb.head, nb.tail = head, tail
-        nb.align_roll(roll_ref)
-        nb.parent = eb[BOW_RENAME[BOW_BONES[i - 1]]] if i else parent
+        nb.align_roll(roll)
+        nb.parent = eb[made[i - 1]] if i else eb[spec['cha']]
         nb.use_connect = False
         made.append(nb.name)
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    for vg in bow.vertex_groups:
-        if vg.name in BOW_RENAME:
-            vg.name = BOW_RENAME[vg.name]
-    mw = t @ bow.matrix_world
-    bow.parent = idol_arm
-    bow.matrix_parent_inverse = idol_arm.matrix_world.inverted()
-    bow.matrix_world = mw
-    for m in bow.modifiers:
-        if m.type == 'ARMATURE':
-            m.object = idol_arm
-    print('    cung: gắn %d xương vào J_Bip_L_Hand' % len(made))
-    return made, s
+    if spec.get('gan_cung'):
+        # Ống tên skin vào ba xương thân, nặng nhất là Spine2 với 87% trọng số.
+        # Gắn cứng vào một xương là đủ: nó vốn gần như không biến dạng.
+        for vg in list(obj.vertex_groups):
+            obj.vertex_groups.remove(vg)
+        g = obj.vertex_groups.new(name=made[0])
+        g.add(list(range(len(obj.data.vertices))), 1.0, 'REPLACE')
+    else:
+        ren = dict(zip(spec['xuong'], made))
+        for vg in obj.vertex_groups:
+            if vg.name in ren:
+                vg.name = ren[vg.name]
+
+    mw = t @ obj.matrix_world
+    obj.parent = idol_arm
+    obj.matrix_parent_inverse = idol_arm.matrix_world.inverted()
+    obj.matrix_world = mw
+    for m in list(obj.modifiers):
+        obj.modifiers.remove(m)
+    obj.modifiers.new('Armature', 'ARMATURE').object = idol_arm
+    print('    %s: %d xương vào %s' % (spec['ten'], len(made), spec['cha']))
+    return list(zip(spec['xuong'], made)) if spec.get('chep_xoay') else []
 
 
-def attach_quiver(idol_arm, src_arm, archer_objs, scale):
-    """Chuyển ống tên sang lưng cô ca sĩ, gắn cứng vào một xương ngực."""
-    q = next((o for o in archer_objs
-              if o.type == 'MESH' and o.name.startswith(QUIVER_MESH)), None)
-    if q is None:
-        print('    KHÔNG tìm thấy lưới ống tên')
-        return None
+def copy_prop_motion(idol_arm, src_arm, clip_names, pairs, prefix):
+    """Chép góc xoay cục bộ của xương đồ vật sang từng clip.
 
-    t = (local_frame(idol_arm, TORSO_DST) @ Matrix.Scale(scale, 4)
-         @ local_frame(src_arm, TORSO_SRC).inverted())
-
-    ws = src_arm.matrix_world
-    b = src_arm.data.bones[QUIVER_ANCHOR_SRC]
-    head = t @ (ws @ b.head_local)
-    tail = t @ (ws @ b.tail_local)
-    roll = (t.to_3x3() @ ((ws @ b.matrix_local).to_3x3()
-                          @ Vector((0.0, 0.0, 1.0)))).normalized()
-
-    bpy.context.view_layer.objects.active = idol_arm
-    bpy.ops.object.mode_set(mode='EDIT')
-    eb = idol_arm.data.edit_bones
-    nb = eb.new('Quiver')
-    nb.head, nb.tail = head, tail
-    nb.align_roll(roll)
-    nb.parent = eb[QUIVER_ANCHOR_DST]
-    nb.use_connect = False
-    name = nb.name
-    bpy.ops.object.mode_set(mode='OBJECT')
-
-    for vg in list(q.vertex_groups):
-        q.vertex_groups.remove(vg)
-    g = q.vertex_groups.new(name=name)
-    g.add(list(range(len(q.data.vertices))), 1.0, 'REPLACE')
-
-    mw = t @ q.matrix_world
-    q.parent = idol_arm
-    q.matrix_parent_inverse = idol_arm.matrix_world.inverted()
-    q.matrix_world = mw
-    for m in q.modifiers:
-        if m.type == 'ARMATURE':
-            m.object = idol_arm
-    print('    ống tên: gắn cứng vào %s' % QUIVER_ANCHOR_DST)
-    return name
-
-
-def copy_bow_motion(idol_arm, src_arm, clip_names, bow_bones):
-    """Chép góc xoay cục bộ của chuỗi xương cung sang từng clip.
-
-    Chép cục bộ ở đây là ĐÚNG, khác hẳn phần thân: xương cung bên đích là bản
-    sao đồng dạng của xương nguồn, cùng tư thế nghỉ, nên góc xoay trong hệ riêng
-    của xương mang đúng một ý nghĩa. Nhờ vậy cung vẫn nhún theo lúc giương.
+    Chép cục bộ ở đây là ĐÚNG, khác hẳn phần thân: xương bên đích là bản sao
+    đồng dạng của xương nguồn, cùng tư thế nghỉ, nên góc xoay trong hệ riêng
+    của xương mang đúng một ý nghĩa.
     """
     scene = bpy.context.scene
     ad = idol_arm.animation_data
     for name in clip_names:
-        src_act = bpy.data.actions[name[len('mimic_'):]]
+        src_act = bpy.data.actions[name[len(prefix):]]
         sad = src_arm.animation_data
         sad.action = src_act
         if getattr(src_act, 'slots', None):
@@ -237,16 +244,14 @@ def copy_bow_motion(idol_arm, src_arm, clip_names, bow_bones):
         ad.action = act
         if getattr(act, 'slots', None):
             ad.action_slot = act.slots[0]
-        n = int(src_act.frame_range[1])
-        for f in range(1, n + 1):
+        for f in range(1, int(src_act.frame_range[1]) + 1):
             scene.frame_set(f)
-            for i, dst in enumerate(bow_bones):
-                sp = src_arm.pose.bones[BOW_BONES[i]]
-                dp = idol_arm.pose.bones[dst]
+            for sb, db in pairs:
+                dp = idol_arm.pose.bones[db]
                 dp.rotation_mode = 'QUATERNION'
-                dp.rotation_quaternion = sp.matrix_basis.to_quaternion()
+                dp.rotation_quaternion = src_arm.pose.bones[sb].matrix_basis.to_quaternion()
                 dp.keyframe_insert(data_path='rotation_quaternion', frame=f)
-    print('    cung: chép chuyển động vào %d clip' % len(clip_names))
+    print('    chép chuyển động đồ vật vào %d clip' % len(clip_names))
 
 
 def clean():
@@ -260,30 +265,32 @@ def armature_of(objs):
 
 
 def main():
+    args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
+    which = args[0] if args else 'cungthu'
+    if which not in SOURCES:
+        raise SystemExit('nguồn phải là một trong: %s' % ', '.join(SOURCES))
+    cfg = SOURCES[which]
     clean()
 
     print('>>> Nạp cô ca sĩ')
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=IDOL)
-    idol_objs = set(bpy.data.objects) - before
-    idol_arm = armature_of(idol_objs)
+    idol_arm = armature_of(set(bpy.data.objects) - before)
 
-    print('>>> Nạp cung thủ làm nguồn động tác')
+    print('>>> Nạp %s làm nguồn động tác' % cfg['ten'])
     before = set(bpy.data.objects)
-    bpy.ops.import_scene.gltf(filepath=ARCHER)
-    archer_objs = set(bpy.data.objects) - before
-    src_arm = armature_of(archer_objs)
+    bpy.ops.import_scene.gltf(filepath=cfg['glb'])
+    src_objs = set(bpy.data.objects) - before
+    src_arm = armature_of(src_objs)
     if idol_arm is None or src_arm is None:
         raise RuntimeError('không tìm thấy đủ hai bộ xương')
 
     have = {b.name for b in src_arm.data.bones}
-    miss = [a for a, b, _c, _d in MIXAMO_MAP if a not in have]
-    if miss:
-        raise RuntimeError('rig nguồn thiếu xương: %s' % miss)
+    miss = [a for a, _b, _c, _d in MIXAMO_MAP if a not in have]
     have2 = {b.name for b in idol_arm.data.bones}
     miss2 = [c for _a, _b, c, _d in MIXAMO_MAP if c not in have2]
-    if miss2:
-        raise RuntimeError('rig đích thiếu xương: %s' % miss2)
+    if miss or miss2:
+        raise RuntimeError('thiếu xương: nguồn %s, đích %s' % (miss, miss2))
     print('    ánh xạ %d cặp xương, cả hai rig đều có đủ' % len(MIXAMO_MAP))
 
     retarget.BONE_MAP = MIXAMO_MAP
@@ -317,16 +324,21 @@ def main():
         n = int(act.frame_range[1])
         print('>>> Chuyển %s (%d khung)' % (act.name, n))
         new = retarget.retarget(
-            idol_arm, src_arm, 'mimic_' + act.name, frames=(1, n),
-            in_place=IN_PLACE.get(act.name, True), ground=True,
-            lock=act.name in LOCK_FEET)
+            idol_arm, src_arm, cfg['dau'] + act.name, frames=(1, n),
+            in_place=cfg['tai_cho'].get(act.name, True), ground=True,
+            lock=act.name in cfg['khoa_chan'])
         made.append(new.name)
 
-    print('>>> Gắn cung và ống tên')
-    bow_bones, scale = attach_bow(idol_arm, src_arm, archer_objs)
-    if bow_bones:
-        copy_bow_motion(idol_arm, src_arm, made, bow_bones)
-    attach_quiver(idol_arm, src_arm, archer_objs, scale)
+    print('>>> Mang đồ sang')
+    scale = (rig_height(idol_arm, 'J_Bip_C_Hips', 'J_Bip_C_Head')
+             / rig_height(src_arm, M + 'Hips', M + 'Head'))
+    print('    tỉ lệ %.3f theo chiều cao rig' % scale)
+    keep_mesh, pairs = set(), []
+    for spec in cfg['do']:
+        pairs += attach_prop(idol_arm, src_arm, src_objs, spec, scale)
+        keep_mesh.add(spec['luoi'].lower())
+    if pairs:
+        copy_prop_motion(idol_arm, src_arm, made, pairs, cfg['dau'])
 
     # Đẩy lên NLA: bộ xuất glTF chỉ lấy hoạt ảnh từ strip.
     ad = idol_arm.animation_data
@@ -338,24 +350,21 @@ def main():
         track.name = name
         track.strips.new(name, 1, bpy.data.actions[name])
 
-    for o in archer_objs:                 # chỉ mượn động tác, không lấy hình
-        if o.type == 'MESH' and (o.name.startswith(BOW_MESH)
-                                 or o.name.startswith(QUIVER_MESH)):
-            continue                      # trừ cung và ống tên, đã sang rồi
+    for o in src_objs:                    # chỉ mượn động tác, không lấy hình
+        if o.type == 'MESH' and any(o.name.lower().startswith(k) for k in keep_mesh):
+            continue                      # trừ đồ cầm tay, đã sang rồi
         bpy.data.objects.remove(o, do_unlink=True)
 
-    # Xoá luôn action gốc của cung thủ. Xoá đối tượng thôi chưa đủ: action vẫn
-    # nằm trong file, và bộ xuất glTF vớ được là gán bừa lên bộ xương cô ca sĩ
-    # — quaternion Mixamo áp thẳng lên xương VRoid thì nhân vật vặn xoắn.
+    # Xoá luôn action gốc. Xoá đối tượng thôi chưa đủ: action vẫn nằm trong
+    # file, và bộ xuất glTF vớ được là gán bừa lên bộ xương cô ca sĩ —
+    # quaternion Mixamo áp thẳng lên xương VRoid thì nhân vật vặn xoắn.
     keep = set(made)
     for act in list(bpy.data.actions):
         if act.name not in keep:
             bpy.data.actions.remove(act)
-    print('    còn lại %d action: %s' % (len(bpy.data.actions),
-                                         sorted(a.name for a in bpy.data.actions)))
 
     os.makedirs(OUT_DIR, exist_ok=True)
-    out = os.path.join(OUT_DIR, 'idol_mimic.glb')
+    out = os.path.join(OUT_DIR, cfg['ra'])
     print('>>> Xuất %s' % out)
     bpy.ops.export_scene.gltf(
         filepath=out, export_format='GLB',

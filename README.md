@@ -12,9 +12,10 @@ Trong repo có **ba nhân vật**, mỗi nhân vật một trình xem riêng:
 | Cung thủ Erika | `char6.fbx`, rig Mixamo 87 xương | `scripts/build_char6.py` | `web/char6.html` |
 | Hiệp sĩ thập tự | ba file `char4*.fbx`, rig Mixamo 86 xương | `scripts/build_char4.py` | `web/char4.html` |
 
-Cộng thêm một trang thứ tư, `web/idol_mimic.html`, cho cô ca sĩ diễn lại năm
-động tác của cung thủ để so hai bên cạnh nhau — bài toán chuyển động tác giữa
-hai bộ xương khác chuẩn hoàn toàn.
+Cộng thêm một trang thứ tư, `web/idol_mimic.html`, cho cô ca sĩ diễn lại **11
+động tác của cả hai nhân vật Mixamo** — kèm theo cả đồ nghề: cung, ống tên,
+kiếm, khiên — để so hai bên cạnh nhau. Đây là bài toán chuyển động tác giữa hai
+bộ xương khác chuẩn hoàn toàn.
 
 Cô ca sĩ là phần lớn nhất: 19 trạng thái hoạt ảnh (5 trong đó retarget từ mocap
 thật), 57 blendshape khuôn mặt, khẩu hình bám theo tiếng hát, và một bản nhúng
@@ -64,7 +65,8 @@ BL=/Applications/Blender.app/Contents/MacOS/Blender
 $BL --background --factory-startup --python scripts/build_character.py
 $BL --background --factory-startup --python scripts/build_char6.py
 $BL --background --factory-startup --python scripts/build_char4.py
-$BL --background --factory-startup --python scripts/build_idol_mimic.py
+$BL --background --factory-startup --python scripts/build_idol_mimic.py -- cungthu
+$BL --background --factory-startup --python scripts/build_idol_mimic.py -- kiemsi
 
 # rồi mở trình xem
 python3 -m http.server 8080
@@ -75,7 +77,8 @@ python3 -m http.server 8080
 | studio cô ca sĩ | `http://localhost:8080/web/` |
 | cung thủ Erika | `http://localhost:8080/web/char6.html` |
 | hiệp sĩ thập tự | `http://localhost:8080/web/char4.html` |
-| cô ca sĩ bắt chước cung thủ | `http://localhost:8080/web/idol_mimic.html` |
+| cô ca sĩ bắt chước | `http://localhost:8080/web/idol_mimic.html` |
+| — mở thẳng bộ hiệp sĩ | `…/web/idol_mimic.html?nguon=kiemsi` |
 
 ## Bốn bài học đắt nhất
 
@@ -149,7 +152,12 @@ trên. Bốn món trang bị tháo được từ trang web — mũ trụ, khiên
 
 ### Chuyển động tác giữa hai rig — `scripts/build_idol_mimic.py`
 
-87 xương Mixamo sang 154 xương VRoid. Không chép quaternion được: cùng một số
+Một script, hai nguồn: `-- cungthu` lấy động tác của Erika, `-- kiemsi` lấy của
+hiệp sĩ. Cùng bảng ánh xạ xương, cùng phép ghim trục thứ hai, cùng cách mang đồ
+cầm tay sang — khác nhau chỉ ở bảng `SOURCES`: file nguồn, mốc tại chỗ của từng
+clip, và món nào cầm ở tay nào.
+
+86–87 xương Mixamo sang 154 xương VRoid. Không chép quaternion được: cùng một số
 đo xoay đặt lên hai rig khác chuẩn cho ra hai tư thế khác nhau, vì hướng xương
 lúc nghỉ đã khác sẵn. Dùng lại `scripts/retarget.py` của phần mocap: bám hướng
 nối hai khớp, không quan tâm tư thế nghỉ.
@@ -159,6 +167,17 @@ còn góc xoay *quanh* chính hướng đó vẫn tự do — với xương ch�
 Hips→Spine gần như thẳng đứng, nên cái bị bỏ tự do chính là hướng mặt. Bảng
 `TWISTS` ghim thêm trục thứ hai: hai háng cho chậu, đường ngón trỏ–ngón út cho
 bàn tay, đường nối hai mắt cho đầu.
+
+Đồ cầm tay sang được nhờ một phép đồng dạng đưa cả vùng bàn tay bên nguồn về
+vùng bàn tay bên đích. Hệ trục bàn tay dựng từ giải phẫu — dọc lòng bàn tay tới
+ngón giữa, ngang lòng bàn tay từ ngón trỏ sang ngón út — chứ không lấy hướng
+xương lúc nghỉ, vì hai rig đặt bàn tay lúc nghỉ khác nhau và lấy hướng ấy thì
+đồ xoay ngang. Đặt xương VÀ lưới bằng đúng phép ấy thì thế bind không đổi, khỏi
+sơn lại trọng số.
+
+Một chi tiết đáng nhớ: khiên của hiệp sĩ vốn treo vào **cẳng tay**, nhưng ở đây
+gắn vào **bàn tay**. Góc vặn của cẳng tay không được ghim trong phép chuyển,
+còn bàn tay thì có — treo vào cẳng tay là mặt khiên quay lung tung.
 
 ## Chạy trình xem
 
