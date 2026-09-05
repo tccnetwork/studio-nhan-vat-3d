@@ -962,7 +962,267 @@ MOUTH_RX = 0.027
 MOUTH_RZ = 0.013
 SMILE_LIFT = 0.0045      # nâng khoé miệng
 SMILE_BACK = 0.0020      # kéo khoé ra sau một chút
-SMILE_DEFAULT = 0.45     # mức cười giữ thường trực
+SMILE_DEFAULT = 0.0      # mặt lúc nghỉ: không cười
+
+
+def _falloff(t):
+    """1 ở tâm, 0 ở mép, mượt hai đầu."""
+    t = max(0.0, min(1.0, t))
+    return 1.0 - (t * t * (3.0 - 2.0 * t))
+
+
+def add_face_shapes():
+    """Nặn hai khẩu hình: nhắm mắt và mỉm cười."""
+    from mathutils import Vector
+    face = bpy.data.objects.get(FACE_MESH)
+    eyes = bpy.data.objects.get('eyes')
+    if face is None or eyes is None:
+        return
+    ep = [eyes.matrix_world @ v.co for v in eyes.data.vertices]
+    left = [p for p in ep if p.x > 0]
+    right = [p for p in ep if p.x <= 0]
+    centres = [sum(g, Vector()) / len(g) for g in (left, right) if g]
+
+    if face.data.shape_keys is None:
+        face.shape_key_add(name='Basis', from_mix=False)
+    basis = face.data.shape_keys.key_blocks['Basis']
+    mw = face.matrix_world
+    inv = mw.inverted()
+
+    blink = face.shape_key_add(name='NhamMat', from_mix=False)
+    moved = 0
+    for i, v in enumerate(face.data.vertices):
+        w = mw @ v.co
+        for c in centres:
+            flat = ((w.x - c.x) ** 2 + (w.z - c.z) ** 2) ** 0.5
+            if flat > EYE_R or w.y > c.y + 0.035:
+                continue
+            k = _falloff(flat / EYE_R)
+            if k <= 0.0:
+                continue
+            # kéo mí về đường ngang giữa mắt: mí trên xuống, mí dưới lên
+            tgt = Vector((w.x, w.y - BLINK_PUSH * k, w.z + (c.z - w.z) * k))
+            blink.data[i].co = inv @ tgt
+            moved += 1
+            break
+
+    smile = face.shape_key_add(name='MimCuoi', from_mix=False)
+    lifted = 0
+    for i, v in enumerate(face.data.vertices):
+        w = mw @ v.co
+        for sx in (MOUTH_X, -MOUTH_X):
+            e = (((w.x - sx) / MOUTH_RX) ** 2 + ((w.z - MOUTH_Z) / MOUTH_RZ) ** 2) ** 0.5
+            if e > 1.0 or w.y > -0.075:
+                continue
+            k = _falloff(e)
+            if k <= 0.0:
+                continue
+            out = 0.0012 if sx > 0 else -0.0012
+            tgt = Vector((w.x + out * k,
+                          w.y + SMILE_BACK * k,
+                          w.z + SMILE_LIFT * k))
+            smile.data[i].co = inv @ tgt
+            lifted += 1
+            break
+
+    blink.value = 0.0
+    smile.value = SMILE_DEFAULT
+    print('    khẩu hình: NhamMat %d đỉnh, MimCuoi %d đỉnh (cười giữ %.2f)'
+          % (moved, lifted, SMILE_DEFAULT))
+    return face
+
+
+# Khuôn mặt đi thành MỘT clip dài riêng, lặp độc lập với clip thân.
+#
+# Lý do: kênh "weights" của glTF ghi tất cả trọng số morph cùng lúc, nên nụ
+# cười buộc phải nằm chung đường với chớp mắt. Mà các clip thân chỉ dài 0,9-2,4
+# giây — nhồi nụ cười vào đó thì cứ mỗi vòng lặp lại cười một lần, thành ra
+# cười liên tục. Một clip mặt dài 14 giây thì trong đó cười đúng một lần, còn
+# clip thân vẫn lặp theo nhịp riêng của nó.
+FACE_CLIP = 'Mat_ChopVaCuoi'
+FACE_SECONDS = 18.0
+# Người ngồi yên chớp mắt khoảng 3-6 giây một lần. Bản đầu tôi đặt 7 cú trong
+# 14 giây, tức mỗi 2 giây — nhìn ra ngay là chớp liên tục. Năm cú trong 18 giây
+# là mỗi 3,6 giây. Hai cú 10,8 và 11,3 cố ý sát nhau: người thật vẫn hay chớp
+# đúp, và chính chỗ không đều đó làm nhịp bớt máy móc.
+BLINK_AT = (2.1, 6.4, 10.8, 11.3, 15.9)
+BLINK_DOWN = 0.05        # giây nhắm lại
+BLINK_UP = 0.09          # giây mở ra
+# Cười một lần trong cả clip: lên từ từ, giữ, rồi tắt chậm hơn lúc lên.
+SMILE_IN, SMILE_HOLD, SMILE_OUT = 7.2, 8.1, 9.8
+SMILE_PEAK = 0.55
+
+
+def animate_face(face):
+    """Một clip mặt dài: chớp mắt nhiều lần, mỉm cười đúng một lần."""
+    keys = face.data.shape_keys
+    if keys is None:
+        return
+    if keys.animation_data is None:
+        keys.animation_data_create()
+    ad = keys.animation_data
+    ad.action = None
+    for t in list(ad.nla_tracks):
+        ad.nla_tracks.remove(t)
+
+    act = bpy.data.actions.new(FACE_CLIP)
+    n = FACE_SECONDS * 30.0
+
+    fb = act.fcurves.new('key_blocks["NhamMat"].value')
+    fb.keyframe_points.insert(1.0, 0.0).interpolation = 'LINEAR'
+    for t in BLINK_AT:
+        for off, val in ((-BLINK_DOWN, 0.0), (0.0, 1.0), (BLINK_UP, 0.0)):
+            x = max(1.0, min(n, (t + off) * 30.0))
+            fb.keyframe_points.insert(x, val).interpolation = 'LINEAR'
+    fb.keyframe_points.insert(n, 0.0).interpolation = 'LINEAR'
+    fb.update()
+
+    fs = act.fcurves.new('key_blocks["MimCuoi"].value')
+    for t, v in ((0.0, 0.0), (SMILE_IN, 0.0), (SMILE_HOLD, SMILE_PEAK),
+                 (SMILE_OUT, SMILE_PEAK), (SMILE_OUT + 1.1, 0.0),
+                 (FACE_SECONDS, 0.0)):
+        x = max(1.0, min(n, t * 30.0))
+        fs.keyframe_points.insert(x, v).interpolation = 'BEZIER'
+    fs.update()
+
+    act.use_fake_user = True
+    track = ad.nla_tracks.new()
+    track.name = FACE_CLIP
+    track.strips.new(FACE_CLIP, 1, act)
+    print('    clip mặt %s: %.0f giây, %d cú chớp, cười 1 lần từ giây %.1f'
+          % (FACE_CLIP, FACE_SECONDS, len(BLINK_AT), SMILE_IN))
+
+
+IDLE_CLIP = '01_DungYen'
+
+
+def loop_idle_clip():
+    """Hoà đuôi đoạn đứng yên về khung đầu để nó lặp không giật.
+
+    Idle là clip duy nhất thật sự cần lặp. Đo được nó giật 31 lần mức đổi bình
+    thường ở mối nối, hông nhảy 5,8 mm mỗi vòng — nhìn ra ngay vì phần còn lại
+    của clip gần như bất động (0,9° mỗi khung).
+
+    Cửa sổ hoà tự chọn theo tỉ số giữa mức lệch và bước thường, để phần sửa mỗi
+    khung không lớn hơn chuyển động vốn có. Xong thì bỏ khung cuối vì nó đã
+    trùng khít khung đầu, giữ lại là đứng hình thêm một khung mỗi vòng.
+    """
+    from mathutils import Quaternion
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    act = bpy.data.actions.get(IDLE_CLIP)
+    if arm is None or act is None:
+        return
+    ad = arm.animation_data
+    ad.action = act
+    if getattr(act, 'slots', None):
+        ad.action_slot = act.slots[0]
+    scene = bpy.context.scene
+    n = int(act.frame_range[1])
+    bones = [pb for pb in arm.pose.bones
+             if any(fc.data_path == 'pose.bones["%s"].rotation_quaternion' % pb.name
+                    for fc in act.fcurves)]
+    if not bones or n < 8:
+        return
+
+    def snapshot(f):
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        return {pb.name: pb.rotation_quaternion.copy() for pb in bones}
+
+    def gap(a, b):
+        return sum(math.degrees(2 * math.acos(min(1.0, abs(a[pb.name].dot(b[pb.name])))))
+                   for pb in bones)
+
+    head = snapshot(1)
+    tail = snapshot(n)
+    steps = []
+    prev = head
+    for f in range(2, n + 1):
+        cur = snapshot(f)
+        steps.append(gap(prev, cur))
+        prev = cur
+    steps.sort()
+    step = max(0.3, steps[len(steps) // 2])
+    want = int(math.ceil(gap(tail, head) / (0.6 * step)))
+    blend = max(3, min(want, n // 2))
+
+    hips = arm.pose.bones.get('mixamorig:Hips')
+    scene.frame_set(1)
+    bpy.context.view_layer.update()
+    head_loc = hips.location.copy() if hips else None
+
+    for i in range(blend):
+        f = n - blend + 1 + i
+        w = (i + 1) / blend
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        for pb in bones:
+            cur = pb.rotation_quaternion.copy()
+            tgt = head[pb.name].copy()
+            if cur.dot(tgt) < 0.0:
+                tgt.negate()
+            pb.rotation_quaternion = cur.slerp(tgt, w)
+            pb.keyframe_insert(data_path='rotation_quaternion', frame=f)
+        if hips and head_loc is not None:
+            hips.location = hips.location.lerp(head_loc, w)
+            hips.keyframe_insert(data_path='location', frame=f)
+
+    for fc in act.fcurves:
+        keep = [(kp.co[0], kp.co[1]) for kp in fc.keyframe_points if kp.co[0] < n - 0.5]
+        fc.keyframe_points.clear()
+        for x, y in keep:
+            fc.keyframe_points.insert(x, y).interpolation = 'LINEAR'
+        fc.update()
+    print('    khép vòng %s: lệch %.0f°, bước thường %.1f° -> hoà %d khung, còn %d khung'
+          % (IDLE_CLIP, gap(tail, head), step, blend, n - 1))
+
+
+def push_actions_to_nla():
+    """Đẩy mọi action lên strip NLA — bộ xuất glTF chỉ lấy hoạt ảnh từ đó.
+
+    Phải gọi SAU CÙNG. Trước đây bước này nằm ngay trong split_long_clip, và
+    hậu quả rất khó thấy: mọi hàm sau đó muốn đọc tư thế NGHỈ đều đặt
+    animation_data.action = None, nhưng NLA vẫn đang điều khiển bộ xương nên
+    thứ đọc được là một tư thế bất kỳ. Đo được: mũi tên lệch đúng 62° ở mọi
+    khung vì mốc nghỉ của nó lấy nhầm.
+    """
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    if arm is None:
+        return
+    if not arm.animation_data:
+        arm.animation_data_create()
+    ad = arm.animation_data
+    ad.action = None
+    for t in list(ad.nla_tracks):
+        ad.nla_tracks.remove(t)
+    for act in sorted(bpy.data.actions, key=lambda a: a.name):
+        track = ad.nla_tracks.new()
+        track.name = act.name
+        track.strips.new(act.name, 1, act)
+    print('    đẩy %d action lên NLA' % len(bpy.data.actions))
+
+
+# ---- Khẩu hình chớp mắt và mỉm cười -------------------------------------
+#
+# Model không có sẵn một morph target nào, nên hai khẩu hình này được nặn từ
+# hình học. Đầu có 4432 đỉnh, mỗi mắt 277 đỉnh quanh nó, vùng miệng 1416 —
+# thừa mật độ để biến dạng mà không rách.
+#
+# Mốc đo từ mặt cắt dọc giữa mặt: mắt z 1,646-1,680; mũi nhô nhất ở z 1,627;
+# môi ở z ~1,605 (chỗ mặt nhô lại lần nữa sau khi lõm dưới mũi).
+FACE_MESH = 'HeadAndHand'
+EYE_R = 0.026            # mét, bán kính vùng mí bị kéo
+BLINK_PUSH = 0.0015      # đẩy mí ra trước cho ôm cầu mắt
+MOUTH_Z = 1.605
+MOUTH_X = 0.021          # nửa bề rộng miệng
+# Vùng ảnh hưởng hình BẦU DỤC: rộng ngang, hẹp dọc. Dùng hình tròn bán kính
+# 24 mm thì nó với lên tới z 1,629, tức chạm cánh mũi (mũi nhô nhất ở 1,627) —
+# nhìn ra ngay là mũi bị kéo méo khi cười hết mức.
+MOUTH_RX = 0.027
+MOUTH_RZ = 0.013
+SMILE_LIFT = 0.0045      # nâng khoé miệng
+SMILE_BACK = 0.0020      # kéo khoé ra sau một chút
+SMILE_DEFAULT = 0.0      # mặt lúc nghỉ: không cười
 
 
 def _falloff(t):
@@ -1162,7 +1422,7 @@ def main():
     push_actions_to_nla()
     face = add_face_shapes()
     if face is not None:
-        animate_blink(face)
+        animate_face(face)
     shoot = make_shoot_clip() if MAKE_SHOOT else None
     if shoot is not None:
         ad = next(o for o in bpy.data.objects if o.type == 'ARMATURE').animation_data

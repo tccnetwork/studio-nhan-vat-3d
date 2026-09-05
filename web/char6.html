@@ -257,7 +257,16 @@ dl.facts dd {
       <i>Nhắm mắt</i> kéo <span class="num">451</span> đỉnh mí về đường ngang
       giữa mắt; <i>mỉm cười</i> nâng <span class="num">908</span> đỉnh quanh hai
       khoé miệng. Vùng ảnh hưởng của nụ cười phải là hình bầu dục rộng ngang hẹp
-      dọc — dùng hình tròn thì nó với lên tới cánh mũi và kéo méo mũi.</li>
+      dọc — dùng hình tròn thì nó với lên tới cánh mũi và kéo méo mũi.
+      <br><br>
+      Khuôn mặt đi thành <b>một clip dài 18 giây lặp riêng</b>, không gắn vào
+      clip thân. Kênh <code>weights</code> của glTF ghi cả hai morph cùng lúc
+      nên chớp mắt và mỉm cười buộc phải đi chung đường; nhồi vào clip thân dài
+      0,9–2,4 giây thì cứ mỗi vòng lại cười một lần. Clip mặt dài hơn hẳn nên
+      trong một vòng chỉ cười <span class="num">một</span> lần
+      (giây <span class="num">7,5–10,5</span>) và chớp
+      <span class="num">5</span> lần, tức mỗi <span class="num">3,6</span> giây
+      — đúng nhịp người ngồi yên.</li>
 
       <li><b>Bốn đoạn là một bộ động tác game: đứng yên · gục ngã · bắn cung ·
       trúng đòn.</b> Tôi đọc sai tên cả bốn hai lần liền — đoán theo cao độ bàn
@@ -329,7 +338,7 @@ rim.position.set(-0.4, 2.2, -3.2);
 scene.add(rim);
 scene.add(new THREE.HemisphereLight(0xbcd0e8, 0x2a2a20, 0.55 * L));
 
-let mixer = null, model = null, current = null, blinkClips = [], blinkAction = null;
+let mixer = null, model = null, current = null;
 const originals = new Map();          // vật liệu thật, để bật lại sau khi xem bản gốc
 // Đúng màu Blender dùng để báo "không tìm thấy ảnh".
 const missing = new THREE.MeshStandardMaterial({ color: 0xd633c8, roughness: 0.85 });
@@ -352,13 +361,14 @@ loader.load(MODEL, gltf => {
   controls.update();
 
   mixer = new THREE.AnimationMixer(model);
-  // Chớp mắt nằm ở clip riêng vì bộ xuất glTF đặt tên animation theo tên
-  // action, mà hai action không thể trùng tên trong Blender nên không gộp
-  // được vào clip thân. Ở đây phát kèm: chọn "03_BanCung" thì chạy luôn
-  // "blink_03_BanCung".
-  blinkClips = gltf.animations.filter(c => c.name.startsWith('blink_'));
+  // Khuôn mặt là MỘT clip dài 18 giây, lặp độc lập với clip thân. Kênh
+  // "weights" của glTF ghi cả hai morph cùng lúc nên chớp mắt và mỉm cười
+  // buộc phải đi chung đường; để nó dài hơn hẳn clip thân thì trong một vòng
+  // mặt mới cười đúng một lần, còn thân vẫn lặp theo nhịp riêng.
+  const faceClip = gltf.animations.find(c => c.name.startsWith('Mat_'));
+  if (faceClip) mixer.clipAction(faceClip).play();
   const box_ = document.getElementById('clips');
-  const bodyClips = gltf.animations.filter(c => !c.name.startsWith('blink_'));
+  const bodyClips = gltf.animations.filter(c => !c.name.startsWith('Mat_'));
   bodyClips.forEach((clip, i) => {
     const b = document.createElement('button');
     // Tên clip có nghĩa hơn độ dài, sau khi đã cắt clip dài thành bốn đoạn.
@@ -374,8 +384,7 @@ loader.load(MODEL, gltf => {
   const stop = document.createElement('button');
   stop.textContent = '⏸ Đứng yên';
   stop.addEventListener('click', () => {
-    if (current) current.stop();
-    if (blinkAction) { blinkAction.stop(); blinkAction = null; }
+    if (current) current.stop();     // clip mặt vẫn chạy tiếp, cố ý
     current = null;
     [...box_.children].forEach(c => c.classList.remove('on'));
     stop.classList.add('on');
@@ -391,10 +400,6 @@ function play(clip, btn) {
   if (current && current !== next) current.fadeOut(0.25);
   next.reset().fadeIn(0.25).play();
   current = next;
-  if (blinkAction) blinkAction.stop();
-  const bc = blinkClips.find(c => c.name === 'blink_' + clip.name);
-  blinkAction = bc ? mixer.clipAction(bc) : null;
-  if (blinkAction) blinkAction.reset().play();
   [...btn.parentNode.children].forEach(c => c.classList.remove('on'));
   btn.classList.add('on');
 }
