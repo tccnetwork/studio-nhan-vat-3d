@@ -56,12 +56,37 @@ NECK_AXIS_Y = 0.030
 # --- tham số khuôn mặt -----------------------------------------------------
 # Mắt anime nam hẹp và dẹt hơn hẳn, chứ không phải chỉ nhỏ đi. Thu đều hai
 # chiều thì vẫn ra mắt nữ, chỉ là nhỏ hơn.
+# Mũi: chóp nhô ra chỉ 14 mm so với mặt phẳng má, và VRoid vẽ mũi rất nhỏ.
+NOSE_Z = 1.470            # chóp mũi sau khi đã sửa vùng nén miệng
+NOSE_RX = 0.024
+NOSE_RZ = 0.021
+# Đo mặt hiệp sĩ làm chuẩn: chóp mũi anh ta nhô 0,021 m so với mặt phẳng má
+# trên một cái đầu cao 0,222 m. Nhân vật này nhô 0,022 trên đầu cao 0,244 —
+# tỉ lệ đã gần bằng, nên không cần đẩy ra nhiều. Cái thiếu là KÍCH THƯỚC: mũi
+# VRoid ngắn và bé, nên kéo dài là chính.
+NOSE_OUT = 0.005          # m, đẩy ra trước
+NOSE_TALL = 1.22          # kéo cao vùng mũi quanh chính tâm nó
+
+# Cằm: đo bề ngang mặt theo cao độ thì ở z=1,414 chỉ còn 3,7 mm — gần như một
+# điểm nhọn. Nới rộng dần về phía dưới cho nó thành chữ U thay vì chữ V.
+# Cũng đo trên hiệp sĩ: ở mức 10% chiều cao đầu tính từ cằm, hàm anh ta đã
+# rộng bằng 55% bề ngang lớn nhất; nhân vật này mới 35%. Ở mức 2,5% thì 21%
+# so với 9%. Hệ số cần khoảng 2,3 ở đáy, tắt dần về 1,0 ở mức 20%.
+CHIN_Z = 1.487            # trùng quãng tắt của quai hàm, để không thành bậc
+CHIN_BOTTOM = 1.412
+CHIN_WIDE = 1.50          # hệ số ở đúng đáy cằm, nhân thêm với JAW_WIDE
+
 EYE_SHRINK_X = 0.90
 EYE_SHRINK_Z = 0.76
 BROW_DOWN  = 0.005        # m, hạ chân mày xuống sát mắt
 JAW_WIDE   = 1.08         # bạnh quai hàm
 JAW_Z      = 1.480        # sau khi đã kéo cao 4,5%, cằm nằm ở 1,413
 JAW_SPAN   = 0.055
+
+# Da đậm hơn. Nhân thẳng vào pixel của hai ảnh da, vì chỉ hai vật liệu da dùng
+# tới chúng — quần áo, tóc, mắt đều có ảnh riêng nên không bị lây.
+SKIN_IMAGES = ('Body_00', 'Face_00')
+SKIN_TINT = (0.74, 0.62, 0.55)   # nhân theo từng kênh, ngả ấm chứ không xám
 
 EYE_MATS  = ('EyeIris', 'EyeWhite', 'EyeHighlight', 'FaceEyeline')
 BROW_MATS = ('FaceBrow',)
@@ -187,8 +212,13 @@ def mat_verts(obj, keys):
 # không phải một trạng thái mở mà khẩu hình ấy đóng lại được.
 MOUTH_Z = 1.4514          # tâm miệng sau khi đã kéo cao 4,5%
 MOUTH_RX = 0.055          # bán trục ngang của vùng ảnh hưởng
-MOUTH_RZ = 0.030          # bán trục dọc
-MOUTH_CLOSE = 0.30        # nén còn bao nhiêu phần chiều cao
+# Bán trục dọc phải BẤT ĐỐI XỨNG. Bản đầu dùng chung 0,030 cho cả hai chiều,
+# và nó hút luôn cái mũi: đo được chóp mũi tụt từ z=1,473 xuống 1,458 — mất
+# 15 mm, đúng thứ nhìn ra là "mũi thấp". Chóp mũi chỉ cách môi trên 9 mm nên
+# phía trên phải tắt nhanh hơn hẳn phía dưới.
+MOUTH_RZ_UP = 0.020
+MOUTH_RZ_DOWN = 0.030
+MOUTH_CLOSE = 0.35        # nén còn bao nhiêu phần chiều cao
 
 
 def close_mouth(face):
@@ -204,8 +234,10 @@ def close_mouth(face):
     inv = mw.inverted()
 
     def squash(p):
-        r = math.hypot(p.x / MOUTH_RX, (p.z - MOUTH_Z) / MOUTH_RZ)
-        w = 1.0 - smoothstep(0.55, 1.35, r)
+        dz = p.z - MOUTH_Z
+        rz = dz / (MOUTH_RZ_UP if dz > 0 else MOUTH_RZ_DOWN)
+        r = math.hypot(p.x / MOUTH_RX, rz)
+        w = 1.0 - smoothstep(0.70, 1.15, r)
         if w <= 0.0:
             return p
         k = 1.0 - w * (1.0 - MOUTH_CLOSE)
@@ -262,17 +294,100 @@ def reshape_face(face):
         face.data.vertices[i].co = inv @ p
     if brow:
         print('    chân mày: hạ %d đỉnh xuống %.0f mm' % (len(brow), BROW_DOWN * 1000))
+    def jaw_chin(p):
+        q = p.copy()
+        w = 1.0 - smoothstep(JAW_Z - JAW_SPAN, JAW_Z, q.z)
+        if w > 0.001:
+            q.x *= 1.0 + (JAW_WIDE - 1.0) * w
+        # Cằm nới thêm, mạnh dần xuống đáy. Nới theo TỈ LỆ chứ không cộng thêm
+        # một lượng cố định: cộng thì hai mép cằm tách ra thành hai gờ, còn
+        # nhân thì đường viền vẫn liền.
+        c = 1.0 - smoothstep(CHIN_BOTTOM, CHIN_Z, q.z)
+        if c > 0.001:
+            q.x *= 1.0 + (CHIN_WIDE - 1.0) * c
+        return q
+
     n = 0
+    sk = face.data.shape_keys
     for v in face.data.vertices:
         p = mw @ v.co
-        w = 1.0 - smoothstep(JAW_Z - JAW_SPAN, JAW_Z, p.z)
-        if w <= 0.001:
-            continue
-        p.x *= 1.0 + (JAW_WIDE - 1.0) * w
-        v.co = inv @ p
-        n += 1
-    print('    quai hàm: bạnh %d đỉnh tối đa %.0f%%' % (n, (JAW_WIDE - 1) * 100))
+        q = jaw_chin(p)
+        if (q - p).length > 1e-6:
+            n += 1
+        v.co = inv @ q
+    if sk:
+        for kb in sk.key_blocks:
+            for i in range(len(kb.data)):
+                kb.data[i].co = inv @ jaw_chin(mw @ kb.data[i].co)
+    print('    quai hàm và cằm: nới %d đỉnh, đáy cằm ×%.1f' % (n, CHIN_WIDE))
     face.data.update()
+
+
+def build_nose(face):
+    """Đắp mũi cao và to hơn: đẩy vùng mũi ra trước và kéo cao quanh tâm nó.
+
+    Chỉ đụng vào nửa TRƯỚC của đầu. Vùng ảnh hưởng tính theo (x, z) nên nếu
+    không lọc theo y thì phần gáy cùng cao độ cũng bị đẩy ra sau.
+    """
+    mw = face.matrix_world
+    inv = mw.inverted()
+
+    def shape(p):
+        if p.y > -0.050:
+            return p
+        r = math.hypot(p.x / NOSE_RX, (p.z - NOSE_Z) / NOSE_RZ)
+        w = 1.0 - smoothstep(0.35, 1.20, r)
+        if w <= 0.0:
+            return p
+        q = p.copy()
+        q.y -= NOSE_OUT * w
+        q.z = NOSE_Z + (p.z - NOSE_Z) * (1.0 + (NOSE_TALL - 1.0) * w)
+        return q
+
+    n = 0
+    sk = face.data.shape_keys
+    for v in face.data.vertices:
+        p = mw @ v.co
+        q = shape(p)
+        if (q - p).length > 1e-6:
+            n += 1
+        v.co = inv @ q
+    if sk:
+        for kb in sk.key_blocks:
+            for i in range(len(kb.data)):
+                kb.data[i].co = inv @ shape(mw @ kb.data[i].co)
+    face.data.update()
+    print('    mũi: đẩy %d đỉnh ra trước %.0f mm, kéo cao ×%.2f'
+          % (n, NOSE_OUT * 1000, NOSE_TALL))
+
+
+def darken_skin():
+    """Nhân pixel của ảnh da xuống cho nước da đậm hơn.
+
+    Dùng numpy và foreach_get/foreach_set: ảnh thân là 2048×2048, vòng lặp
+    Python trên 16,8 triệu số thực mất hàng chục giây.
+
+    Nhân theo TỪNG KÊNH chứ không nhân đều: nhân đều chỉ ra một nước da xám
+    hơn, còn hạ kênh lam nhiều hơn kênh đỏ mới ra nước da rám nắng.
+    """
+    import numpy as np
+    tint = np.array(SKIN_TINT, dtype=np.float32)
+    for name in SKIN_IMAGES:
+        img = bpy.data.images.get(name)
+        if img is None:
+            print('    KHÔNG tìm thấy ảnh da %s' % name)
+            continue
+        buf = np.empty(len(img.pixels), dtype=np.float32)
+        img.pixels.foreach_get(buf)
+        px = buf.reshape(-1, 4)
+        before = float(px[:, :3].mean())
+        px[:, :3] *= tint
+        img.pixels.foreach_set(buf)
+        img.update()
+        img.pack()
+        print('    da %s (%d×%d): độ sáng trung bình %.3f -> %.3f'
+              % (name, img.size[0], img.size[1], before,
+                 float(px[:, :3].mean())))
 
 
 def strip_hair_back(body):
@@ -329,6 +444,9 @@ def main():
     face = next(o for o in bpy.data.objects
                 if o.type == 'MESH' and o.name.startswith('Face'))
 
+    print('>>> Da đậm hơn')
+    darken_skin()
+
     print('>>> Cắt tóc ngắn')
     strip_hair_back(body)
     short_hair(arm)
@@ -340,6 +458,7 @@ def main():
     print('>>> Nắn khuôn mặt')
     reshape_face(face)
     close_mouth(face)
+    build_nose(face)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     out = os.path.join(OUT_DIR, 'idol_male.glb')

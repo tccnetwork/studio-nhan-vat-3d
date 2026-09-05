@@ -178,6 +178,19 @@ dài cánh tay thay vì nới vai. Mọi phép nắn đều đi kèm mặt nạ 
 tổng trọng số của nhóm xương liên quan tại đỉnh đó, một trường liên tục nên
 không để lại đường nối.
 
+Số cho cằm và mũi lấy từ mặt hiệp sĩ chứ không đoán: ở mức 10% chiều cao đầu
+tính từ cằm, hàm anh ta rộng bằng 55% bề ngang lớn nhất còn nhân vật này mới
+35%. Riêng mũi thì hoá ra không cần đẩy ra — chóp mũi hiệp sĩ nhô 21 mm trên
+đầu cao 222 mm, nhân vật này 22 mm trên đầu cao 244 mm, tỉ lệ gần bằng nhau;
+cái thiếu là chiều dài. Da đậm hơn bằng cách nhân thẳng vào pixel của hai ảnh
+da, theo từng kênh để ra nước da rám nắng chứ không phải xám: độ sáng trung
+bình 0,86 xuống 0,55.
+
+Một cái bẫy nữa, do chính tôi gây ra rồi phải sửa: phép nén miệng dùng chung
+một bán trục dọc cho cả hai chiều, mà chóp mũi chỉ cách môi trên 9 mm nên nó
+nằm gọn trong vùng ảnh hưởng — đo được chóp mũi tụt 15 mm, đúng thứ nhìn ra là
+"mũi thấp". Vùng ảnh hưởng phải bất đối xứng.
+
 Hai cái bẫy riêng của khẩu hình. Thứ nhất, `Fcl_MTH_Close` KHÔNG khép được
 miệng: đo ra nó chỉ dịch đỉnh miệng tối đa 0,67 mm, vì cái miệng hé lộ lưỡi nằm
 sẵn trong hình nền của VRoid. Phải khép bằng hình học, và nén cả vùng chứ không
