@@ -241,6 +241,97 @@ def split_hood_hair():
     return True
 
 
+# Mũi tên nằm ngửa dưới chân vì xương "arrow" treo vào Hips, và đo được nó
+# đứng yên tuyệt đối trong cả bảy clip — không clip nào dùng nó để bắn. Chuyển
+# sang treo vào chính xương cầm cung thì nó đi theo cung ở mọi tư thế, trông
+# như đã lắp sẵn trên dây, mà không phải dựng thêm một khung hoạt ảnh nào.
+BOW_BONE = 'mixamorig:Left_arch1'
+ARROW_BONE = 'mixamorig:arrow'
+ARROW_AHEAD = 0.12      # mét, phần mũi nhô ra trước tay cầm
+ARROW_LIFT = 0.02       # mét, nâng khỏi tay cầm cho khỏi cắm vào cung
+
+
+def nock_arrow_on_bow():
+    """Dời mũi tên lên cung và đổi xương cha sang xương cầm cung."""
+    import math
+    from mathutils import Matrix, Vector
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    mesh = bpy.data.objects.get('arrow')
+    if arm is None or mesh is None:
+        return
+    bones = arm.data.bones
+    if BOW_BONE not in bones or ARROW_BONE not in bones:
+        return
+
+    mw = arm.matrix_world
+    grip = mw @ bones[BOW_BONE].head_local
+    limb = (mw @ bones[BOW_BONE].tail_local - grip).normalized()
+
+    # Trục dọc mũi tên hiện tại và tâm của nó, đo từ chính lưới.
+    mmw = mesh.matrix_world
+    pts = [mmw @ v.co for v in mesh.data.vertices]
+    centre = sum(pts, Vector()) / len(pts)
+    axis = Vector((0.0, 1.0, 0.0))          # đo được: mũi tên nằm dọc +Y
+    half = max((p - centre).dot(axis) for p in pts)
+
+    # Hướng bắn: vuông góc với cả trục cánh cung lẫn trục xương cầm cung.
+    shoot = limb.cross(Vector((0.0, 1.0, 0.0)))
+    if shoot.length < 1e-4:
+        shoot = Vector((1.0, 0.0, 0.0))
+    shoot.normalize()
+    if shoot.x < 0:                          # mũi phải hướng ra ngoài, xa thân
+        shoot = -shoot
+    target = grip + shoot * (ARROW_AHEAD - half) + limb * ARROW_LIFT
+
+    rot = axis.rotation_difference(shoot).to_matrix().to_4x4()
+    xform = Matrix.Translation(target) @ rot @ Matrix.Translation(-centre)
+
+    for v in mesh.data.vertices:            # lưới bám cứng vào một xương duy nhất
+        v.co = mmw.inverted() @ (xform @ (mmw @ v.co))
+    mesh.data.update()
+
+    prev = bpy.context.view_layer.objects.active
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode='EDIT')
+    eb = arm.data.edit_bones
+    a, b = eb[ARROW_BONE], eb[BOW_BONE]
+    a.head = mw.inverted() @ (xform @ (mw @ a.head))
+    a.tail = mw.inverted() @ (xform @ (mw @ a.tail))
+    a.parent = b
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.context.view_layer.objects.active = prev
+
+    # Khoá cũ của xương này được viết trong hệ của Hips; giữ lại sau khi đổi cha
+    # là đặt mũi tên sai chỗ. Chúng vốn đứng yên nên bỏ đi không mất gì.
+    dropped = 0
+    for act in bpy.data.actions:
+        for fc in [f for f in act.fcurves
+                   if f.data_path.startswith('pose.bones["%s"]' % ARROW_BONE)]:
+            act.fcurves.remove(fc)
+            dropped += 1
+    print('    lắp mũi tên lên cung: đổi cha sang %s, bỏ %d đường cong cũ'
+          % (BOW_BONE.replace('mixamorig:', ''), dropped))
+
+
+def drop_duplicate_actions():
+    """Bỏ những clip trùng nội dung. Ba clip 202 khung giống hệt nhau."""
+    # So TOÀN BỘ đường cong. Lần đầu tôi chỉ lấy 40 đường cong đầu và cứ bảy
+    # khoá lấy một, nên sót mất một cặp trùng: kiểm lại trong GLB thì hai clip
+    # ấy giống hệt nhau ở cả 264 kênh.
+    seen = {}
+    for act in sorted(bpy.data.actions, key=lambda a: a.name):
+        vals = []
+        for fc in sorted(act.fcurves, key=lambda f: (f.data_path, f.array_index)):
+            vals.append((fc.data_path, fc.array_index,
+                         tuple(round(kp.co[1], 5) for kp in fc.keyframe_points)))
+        key = (round(act.frame_range[1] - act.frame_range[0]), tuple(vals))
+        if key in seen:
+            print('    bỏ clip trùng: %s' % act.name[-38:])
+            bpy.data.actions.remove(act)
+        else:
+            seen[key] = act.name
+
+
 def tidy_actions():
     """Đặt lại tên bảy clip Mixamo. Tên gốc kiểu
     'Armature.001|Armature.001|Armature.004|mixamo.com|Layer0.001' vừa dài vừa
@@ -303,6 +394,9 @@ def main():
             split_hood_hair()
         print('    %-14s %-10s %s  nhám %.2f' % (obj.name, label, color, rough))
 
+    print('>>> Lắp mũi tên và dọn clip trùng')
+    nock_arrow_on_bow()
+    drop_duplicate_actions()
     tidy_actions()
 
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -317,7 +411,17 @@ def main():
         export_draco_position_quantization=14,
         export_draco_normal_quantization=10,
         export_draco_texcoord_quantization=12)
-    print('>>> Xong: %.2f MB' % (os.path.getsize(out) / 1048576))
+    # Bản thứ hai KHÔNG nén Draco, dành cho trang nhúng thẳng vào HTML: bộ giải
+    # Draco phải tải thêm file, mà artifact chặn mọi thứ ngoài script. Xuất cùng
+    # lúc để hai bản không bao giờ lệch nhau.
+    web = os.path.join(OUT_DIR, 'char6_web.glb')
+    bpy.ops.export_scene.gltf(
+        filepath=web, export_format='GLB',
+        export_animations=True, export_nla_strips=False,
+        export_skins=True, export_morph=False,
+        export_draco_mesh_compression_enable=False)
+    print('>>> Xong: %.2f MB (nén Draco) · %.2f MB (bản nhúng)'
+          % (os.path.getsize(out) / 1048576, os.path.getsize(web) / 1048576))
 
 
 if __name__ == '__main__':

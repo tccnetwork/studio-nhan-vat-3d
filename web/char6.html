@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cung Thủ Erika</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --pine:    #2C3927;
+  --moss:    #5C6B45;
+  --leather: #6B4A30;
+  --skin:    #CB9E7F;
+  --ink:     #1A1D18;
+  --ground:  #EDEAE1;
+  --panel:   #FFFFFFEE;
+  --line:    #C9C6BA;
+  --text:    #23261F;
+  --muted:   #5E6257;
+  --stage-a: #DCD9CE;
+  --stage-b: #BFC0B2;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:  #141610;
+    --panel:   #1E2119EE;
+    --line:    #363A2E;
+    --text:    #E6E4D8;
+    --muted:   #9AA08D;
+    --stage-a: #1B1E16;
+    --stage-b: #0D0F0A;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:  #141610;
+  --panel:   #1E2119EE;
+  --line:    #363A2E;
+  --text:    #E6E4D8;
+  --muted:   #9AA08D;
+  --stage-a: #1B1E16;
+  --stage-b: #0D0F0A;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font: 400 14px/1.55 "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+.wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 22px 20px 30px;
+}
+@media (max-width: 860px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); }
+}
+
+header { grid-column: 1 / -1; }
+h1 {
+  font-family: Spectral, Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(26px, 4vw, 38px);
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+  text-wrap: balance;
+}
+h1 em {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--moss);
+}
+.sub { margin: 0; color: var(--muted); max-width: 62ch; }
+
+#stage {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--stage-a), var(--stage-b));
+  aspect-ratio: 4 / 5;
+  min-height: 380px;
+}
+#stage canvas { display: block; width: 100%; height: 100%; }
+#hint {
+  position: absolute; left: 12px; bottom: 10px;
+  font: 400 11.5px/1 "IBM Plex Mono", ui-monospace, monospace;
+  color: var(--muted); letter-spacing: .02em;
+  background: var(--panel); padding: 6px 9px; border-radius: 5px;
+  border: 1px solid var(--line);
+}
+#loading {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--muted);
+}
+
+.rail { display: flex; flex-direction: column; gap: 16px; }
+.card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 13px 14px 15px;
+  background: var(--panel);
+}
+.card h2 {
+  font: 600 11px/1 "IBM Plex Sans", sans-serif;
+  letter-spacing: .10em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 10px;
+}
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+button {
+  font: 500 12.5px/1 "IBM Plex Sans", sans-serif;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 10px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+button:hover { border-color: var(--moss); }
+button:focus-visible { outline: 2px solid var(--moss); outline-offset: 2px; }
+button.on {
+  background: var(--moss); border-color: var(--moss); color: #F4F2E9;
+}
+
+dl.facts { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; }
+dl.facts dt { color: var(--muted); font-size: 12.5px; }
+dl.facts dd {
+  margin: 0; text-align: right;
+  font: 500 12.5px/1.4 "IBM Plex Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.swatches { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.sw { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--muted); }
+.sw i {
+  width: 15px; height: 15px; border-radius: 3px; flex: none;
+  border: 1px solid rgba(0,0,0,.22);
+}
+
+.notes { grid-column: 1 / -1; }
+.notes ol { margin: 0; padding-left: 1.15em; max-width: 78ch; }
+.notes li { margin-bottom: 9px; color: var(--muted); }
+.notes li b { color: var(--text); font-weight: 600; }
+.notes code {
+  font: 400 12px/1 "IBM Plex Mono", monospace;
+  background: color-mix(in srgb, var(--moss) 16%, transparent);
+  padding: 1px 4px; border-radius: 3px; color: var(--text);
+}
+.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Cung Thủ Erika <em>— dựng lại vật liệu</em></h1>
+    <p class="sub">File <code>char6.fbx</code> trỏ tới chín texture không tồn tại, nên Blender tô
+    toàn thân bằng màu hồng tím báo thiếu ảnh. Đây là bản thay bằng vật liệu đặc.
+    Kéo để xoay, cuộn để phóng.</p>
+  </header>
+
+  <div id="stage">
+    <div id="loading">đang tải mô hình…</div>
+    <div id="hint">kéo · xoay &nbsp;|&nbsp; cuộn · phóng</div>
+  </div>
+
+  <div class="rail">
+    <div class="card">
+      <h2>Động tác</h2>
+      <div class="btns" id="clips"></div>
+    </div>
+
+    <div class="card">
+      <h2>So sánh</h2>
+      <div class="btns">
+        <button id="btn-after" class="on">Sau khi sửa</button>
+        <button id="btn-before">Bản gốc</button>
+      </div>
+      <p style="margin:9px 0 0;font-size:11.5px;color:var(--muted)">
+        “Bản gốc” là đúng thứ Blender hiện ra khi không tìm thấy texture.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Bảng màu</h2>
+      <div class="swatches">
+        <span class="sw"><i style="background:#2C3927"></i>áo choàng</span>
+        <span class="sw"><i style="background:#5C6B45"></i>áo tunic</span>
+        <span class="sw"><i style="background:#3B382F"></i>quần</span>
+        <span class="sw"><i style="background:#4A3524"></i>giày</span>
+        <span class="sw"><i style="background:#6B4A30"></i>bao tay</span>
+        <span class="sw"><i style="background:#3D2B20"></i>tóc</span>
+        <span class="sw"><i style="background:#CB9E7F"></i>da</span>
+        <span class="sw"><i style="background:#A18E68"></i>mũi tên</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Số liệu</h2>
+      <dl class="facts">
+        <dt>lưới</dt><dd>13</dd>
+        <dt>đỉnh</dt><dd>12 492</dd>
+        <dt>vật liệu</dt><dd>3 → 17</dd>
+        <dt>mũi tên</dt><dd>trên cung</dd>
+        <dt>texture</dt><dd>0</dd>
+        <dt>xương</dt><dd>87</dd>
+        <dt>clip Mixamo</dt><dd>7 → 5</dd>
+        <dt>GLB nén Draco</dt><dd>0,78 MB</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="notes card">
+    <h2>Năm chỗ phải gỡ</h2>
+    <ol>
+      <li><b>Bảy món quần áo dùng chung một vật liệu.</b> Không có texture thì áo,
+      giáp, mũ, quần, giày, ống tên và ống tay thành một khối màu duy nhất. Tách
+      vật liệu theo từng lưới.</li>
+
+      <li><b>Tách xong thì ra loang lổ như áo rằn ri.</b> <code>boots</code>,
+      <code>trousers</code> và <code>armor</code> là bản sao cùng bề mặt với
+      <code>body</code>, dùng chung đúng toạ độ đỉnh — đo được boots trùng
+      <span class="num">470/470</span> đỉnh, trousers <span class="num">477/492</span>,
+      armor <span class="num">527/1165</span>. Bản gốc chạy được vì mỗi mảnh lấy một
+      vùng texture khác nhau. Đã xoá phần bị phủ kín.</li>
+
+      <li><b>Tên lưới không đúng vai.</b> Phải dựng ảnh định danh mới thấy
+      <code>helmet</code> là áo choàng trùm phủ cả vai, còn <code>armor</code> mới là
+      áo tunic. Bảng màu đầu tiên gán ngược.</li>
+
+      <li><b>Mũi tên nằm ngửa dưới chân.</b> Xương <code>arrow</code> treo vào
+      <code>Hips</code> và đo được nó đứng yên tuyệt đối trong cả bảy clip — không
+      clip nào dùng nó để bắn. Đã đổi cha sang chính xương cầm cung, đặt cách tay
+      cầm <span class="num">18,7</span> cm ở độ cao <span class="num">1,40</span> m,
+      nên giờ nó đi theo cung ở mọi tư thế. Tiện thể bỏ
+      <span class="num">2</span> clip trùng lặp hoàn toàn — kiểm ở mức dữ liệu thì
+      chúng giống hệt nhau ở cả <span class="num">264</span> kênh.</li>
+
+      <li><b>Tóc nằm chung lưới với mũ trùm</b> nên bị tô xanh lá, thành mấy cái gai
+      vải trước mặt. Lưới <code>helmet</code> có <span class="num">61</span> mảnh rời:
+      mảnh <span class="num">454</span> đỉnh là mũ, <span class="num">60</span> mảnh
+      còn lại là từng lọn tóc — tách chính xác được.</li>
+    </ol>
+  </section>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+// Bản nén Draco trong build/, nhẹ hơn bản nhúng base64 gần một nửa.
+const MODEL = '../build/char6/char6.glb';
+const DRACO_PATH = 'vendor/draco/';
+const stage = document.getElementById('stage');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 60);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.enablePan = false;
+controls.minDistance = 1.2;
+controls.maxDistance = 7;
+
+// Từ r155 three.js tính ánh sáng theo đơn vị vật lý, hệ số PI trước đây nhân
+// ngầm vào cường độ đã bị bỏ — nên phải nhân lại, nếu không cảnh tối hơn ~3,14 lần.
+const L = Math.PI;
+const key = new THREE.DirectionalLight(0xfff3e2, 2.1 * L);
+key.position.set(2.4, 3.0, 2.6);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xd8e4ff, 0.75 * L);
+fill.position.set(-2.6, 1.4, 1.8);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffffff, 1.15 * L);
+rim.position.set(-0.4, 2.2, -3.2);
+scene.add(rim);
+scene.add(new THREE.HemisphereLight(0xbcd0e8, 0x2a2a20, 0.55 * L));
+
+let mixer = null, model = null, current = null;
+const originals = new Map();          // vật liệu thật, để bật lại sau khi xem bản gốc
+// Đúng màu Blender dùng để báo "không tìm thấy ảnh".
+const missing = new THREE.MeshStandardMaterial({ color: 0xd633c8, roughness: 0.85 });
+
+const draco = new DRACOLoader();
+draco.setDecoderPath(DRACO_PATH);
+const loader = new GLTFLoader();
+loader.setDRACOLoader(draco);
+loader.load(MODEL, gltf => {
+  model = gltf.scene;
+  model.traverse(o => { if (o.isMesh) originals.set(o, o.material); });
+  scene.add(model);
+
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const mid = box.getCenter(new THREE.Vector3());
+  controls.target.set(mid.x, mid.y, mid.z);
+  // Khung 38° dọc: cần khoảng 2,0 lần chiều cao mới lọt trọn người kèm lề.
+  camera.position.set(mid.x + size.y * 0.55, mid.y + size.y * 0.06, mid.z + size.y * 2.0);
+  controls.update();
+
+  mixer = new THREE.AnimationMixer(model);
+  const box_ = document.getElementById('clips');
+  gltf.animations.forEach((clip, i) => {
+    const b = document.createElement('button');
+    b.textContent = (clip.duration).toFixed(1) + ' giây';
+    b.addEventListener('click', () => play(clip, b));
+    box_.appendChild(b);
+    if (i === gltf.animations.length - 1) play(clip, b);
+  });
+  const stop = document.createElement('button');
+  stop.textContent = '⏸ Đứng yên';
+  stop.addEventListener('click', () => {
+    if (current) current.stop();
+    current = null;
+    [...box_.children].forEach(c => c.classList.remove('on'));
+    stop.classList.add('on');
+  });
+  box_.appendChild(stop);
+
+  document.getElementById('loading').remove();
+});
+
+function play(clip, btn) {
+  if (!mixer) return;
+  const next = mixer.clipAction(clip);
+  if (current && current !== next) current.fadeOut(0.25);
+  next.reset().fadeIn(0.25).play();
+  current = next;
+  [...btn.parentNode.children].forEach(c => c.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+function setMode(before) {
+  if (!model) return;
+  model.traverse(o => {
+    if (o.isMesh) o.material = before ? missing : originals.get(o);
+  });
+  document.getElementById('btn-before').classList.toggle('on', before);
+  document.getElementById('btn-after').classList.toggle('on', !before);
+}
+document.getElementById('btn-before').addEventListener('click', () => setMode(true));
+document.getElementById('btn-after').addEventListener('click', () => setMode(false));
+
+function paintBackdrop() {
+  const dark = document.documentElement.dataset.theme === 'dark'
+    || (document.documentElement.dataset.theme !== 'light'
+        && matchMedia('(prefers-color-scheme: dark)').matches);
+  scene.background = null;                 // để nền CSS của khung lộ ra
+  renderer.setClearColor(0x000000, 0);
+  key.intensity = (dark ? 1.9 : 2.1) * L;
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintBackdrop);
+paintBackdrop();
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  if (mixer) mixer.update(clock.getDelta());
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
