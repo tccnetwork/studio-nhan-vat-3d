@@ -242,11 +242,13 @@ dl.facts dd {
       <span class="num">2</span> clip trùng lặp hoàn toàn — kiểm ở mức dữ liệu thì
       chúng giống hệt nhau ở cả <span class="num">264</span> kênh.</li>
 
-      <li><b>Đoạn “Bắn cung” là một chu trình bắn đầy đủ</b> — với tay ra sau vai
-      lấy tên, lắp vào cung, giương cho dây căng hình chữ V, rồi buông. Tôi đọc
-      sai hai lần trước khi thấy: lần đầu đoán theo cao độ bàn tay, lần sau xem
-      sáu khung thưa và tưởng chỉ là “nâng cung rồi hạ”. Phải dựng chín khung mỗi
-      nửa mới đọc ra.</li>
+      <li><b>Bốn đoạn là một bộ động tác game: đứng yên · gục ngã · bắn cung ·
+      trúng đòn.</b> Tôi đọc sai tên cả bốn hai lần liền — đoán theo cao độ bàn
+      tay, rồi xem sáu khung thưa. Phải dựng chín khung mỗi nửa mới thấy đoạn
+      bắn có đủ chu trình: với tay ra sau vai lấy tên, lắp vào cung, giương cho
+      dây căng hình chữ V, rồi buông. Đoạn gục ngã còn bị cắt bỏ
+      <span class="num">6</span> khung cuối, chỗ file gốc kéo pose về thế đứng
+      để vào take sau — giữ lại thì nhân vật vừa chết xong đã bật dậy.</li>
 
       <li><b>Bảy “clip” chỉ là một động tác bị cắt cụt.</b> Trượt từng clip ngắn
       dọc clip dài thì cả bốn đều khớp từ khung 1 với sai lệch <span class="num">0°</span> —
@@ -337,8 +339,8 @@ loader.load(MODEL, gltf => {
   gltf.animations.forEach((clip, i) => {
     const b = document.createElement('button');
     // Tên clip có nghĩa hơn độ dài, sau khi đã cắt clip dài thành bốn đoạn.
-    const nice = { '01_DungVaBuoc': 'Đứng & bước', '02_NhaoLon': 'Nhào lộn',
-                   '03_BanCung': '🏹 Bắn cung', '04_XoayNguoi': 'Xoay người' };
+    const nice = { '01_DungYen': 'Đứng yên', '02_GucNga': '💀 Gục ngã',
+                   '03_BanCung': '🏹 Bắn cung', '04_TrungDon': '💥 Trúng đòn' };
     b.textContent = (nice[clip.name] || clip.name)
                   + '  ' + clip.duration.toFixed(1) + 's';
     b.addEventListener('click', () => play(clip, b));

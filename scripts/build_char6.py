@@ -307,6 +307,7 @@ def _long_axis(pts):
 #   0,70-1,10  giương, dây căng hình chữ V
 #   ~1,10      buông
 SHOT_CLIP = '03_BanCung'
+DEATH_CLIP = '02_GucNga'
 T_GRAB = 0.36        # giây, tay chạm ống tên
 T_NOCK = 0.62        # giây, tên đã nằm trên dây
 # Buông ở 1,02 chứ không phải 1,10: đoạn chỉ dài 1,20 giây, buông muộn thì mũi
@@ -336,20 +337,22 @@ def animate_arrow_shot():
     if arm is None or mesh is None or act is None:
         return
     ad = arm.animation_data
+    mw = arm.matrix_world
+    pb = arm.pose.bones[ARROW_BONE]
+
+    # Ma trận NGHỈ phải lấy từ data.bones, không phải từ pose.bones. Gỡ action
+    # ra KHÔNG đặt lại tư thế: các kênh pose vẫn giữ nguyên giá trị cuối cùng,
+    # nên pb.matrix lúc đó là một tư thế bất kỳ chứ không phải tư thế nghỉ.
+    # Đo được hậu quả: mũi tên lệch đúng 62° ở mọi khung.
+    rest_bone = arm.data.bones[ARROW_BONE].matrix_local.copy()
+    pts = [mesh.matrix_world @ v.co for v in mesh.data.vertices]
+    centre, own, _len, half = _long_axis(pts)   # trục lấy từ hình học, không đoán
+    own = _tip_direction(pts, centre, own)      # và chiều lấy từ bề ngang hai đầu
+    half = max((p - centre).dot(own) for p in pts)
+
     ad.action = act
     if getattr(act, 'slots', None):
         ad.action_slot = act.slots[0]
-
-    mw = arm.matrix_world
-    pb = arm.pose.bones[ARROW_BONE]
-    bpy.context.scene.frame_set(1)
-    bpy.context.view_layer.update()
-    rest_bone = pb.matrix.copy()          # tư thế xương khi chưa đặt gì
-
-    pts = [mesh.matrix_world @ v.co for v in mesh.data.vertices]
-    centre = sum(pts, Vector()) / len(pts)
-    own = Vector((0.0, 1.0, 0.0))         # đo được: mũi tên nằm dọc +Y
-    half = max((p - centre).dot(own) for p in pts)
 
     def place(nock_at, direction, scale):
         """Đặt gốc mũi tên vào nock_at, mũi chỉ theo direction."""
@@ -390,6 +393,21 @@ def animate_arrow_shot():
         pb.keyframe_insert(data_path='rotation_quaternion', frame=f)
         pb.keyframe_insert(data_path='scale', frame=f)
 
+        if f in (20, 26, 30):            # kiểm ngay tại chỗ, không tin phép suy
+            bpy.context.view_layer.update()
+            dg = bpy.context.evaluated_depsgraph_get()
+            em = mesh.evaluated_get(dg)
+            md = em.to_mesh()
+            wp = [em.matrix_world @ v.co for v in md.vertices]
+            em.to_mesh_clear()
+            cc, vv, _l, _h = _long_axis(wp)
+            dd = (grip - rh).normalized()
+            vv = _tip_direction(wp, cc, vv)
+            a = math.degrees(vv.angle(dd))
+            print('      khung %d: mũi chỉ %.2f %.2f %.2f | muốn %.2f %.2f %.2f'
+                  ' | lệch %.0f° (đã tính cả chiều)'
+                  % (f, vv.x, vv.y, vv.z, dd.x, dd.y, dd.z, a))
+
     # Ba đoạn còn lại: giấu hẳn mũi tên đi.
     for other in bpy.data.actions:
         if other.name == SHOT_CLIP:
@@ -415,6 +433,51 @@ def animate_arrow_shot():
           % (T_GRAB, T_NOCK, loose_f, FLY_FADE))
 
 
+def trim_death_tail(rise=0.08):
+    """Cắt mấy khung cuối của đoạn gục ngã, chỗ nhân vật bật dậy.
+
+    File gốc nối các take liền nhau nên sau khi ngã xuống, pose lập tức kéo về
+    thế đứng để vào take sau. Đo được: hông nằm yên ở 0,14-0,15 m suốt mười mấy
+    khung rồi vọt lên 0,35 - 0,51 - 0,68 - 0,84 ở bốn khung cuối. Giữ nguyên
+    thì nhân vật vừa chết xong đã bật dậy.
+    """
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    act = bpy.data.actions.get(DEATH_CLIP)
+    if arm is None or act is None:
+        return
+    ad = arm.animation_data
+    ad.action = act
+    if getattr(act, 'slots', None):
+        ad.action_slot = act.slots[0]
+    n = int(act.frame_range[1])
+    zs = []
+    for f in range(1, n + 1):
+        bpy.context.scene.frame_set(f)
+        dg = bpy.context.evaluated_depsgraph_get()
+        ev = arm.evaluated_get(dg)
+        zs.append((ev.matrix_world @ ev.pose.bones['mixamorig:Hips'].head).z)
+    lo = min(zs)
+    cut = n
+    for f in range(n, 0, -1):
+        if zs[f - 1] <= lo + rise:
+            cut = f
+            break
+    if cut >= n:
+        return
+    # Xoá từng khoá trong lúc duyệt thì chỉ số trượt và Blender báo "Keyframe
+    # not in F-Curve". Giữ lại phần cần rồi dựng lại cả đường cong.
+    for fc in act.fcurves:
+        keep = [(kp.co[0], kp.co[1]) for kp in fc.keyframe_points
+                if kp.co[0] <= cut + 0.5]
+        fc.keyframe_points.clear()
+        for x, y in keep:
+            kp = fc.keyframe_points.insert(x, y)
+            kp.interpolation = 'LINEAR'
+        fc.update()
+    print('    cắt đuôi %s: bỏ %d khung bật dậy, còn %d khung (hông nằm ở %.2f m)'
+          % (DEATH_CLIP, n - cut, cut, lo))
+
+
 def hide_arrow():
     """Bỏ hẳn mũi tên rời khỏi bản xuất, cùng xương của nó."""
     mesh = bpy.data.objects.get('arrow')
@@ -436,6 +499,33 @@ def hide_arrow():
             act.fcurves.remove(fc)
             dropped += 1
     print('    ẩn mũi tên rời: bỏ lưới, bỏ xương, bỏ %d đường cong' % dropped)
+
+
+def _tip_direction(pts, centre, axis):
+    """Đầu nào của mũi tên là MŨI NHỌN.
+
+    Trục chính chỉ cho biết đường thẳng, không cho biết chiều. Nhận ra bằng bề
+    ngang: đuôi có ba cánh lông xoè rộng, mũi thì thu nhọn. So bán kính trung
+    bình quanh trục ở 20% chiều dài mỗi đầu — đầu nào mảnh hơn là mũi.
+    """
+    ext = [(p - centre).dot(axis) for p in pts]
+    lo, hi = min(ext), max(ext)
+    span = hi - lo
+    if span < 1e-6:
+        return axis
+
+    def spread(sel):
+        rs = []
+        for p, e in zip(pts, ext):
+            if not sel(e):
+                continue
+            radial = (p - centre) - axis * e
+            rs.append(radial.length)
+        return sum(rs) / len(rs) if rs else 0.0
+
+    front = spread(lambda e: e > hi - span * 0.20)
+    back = spread(lambda e: e < lo + span * 0.20)
+    return axis if front <= back else -axis
 
 
 def put_arrow_in_quiver():
@@ -548,10 +638,10 @@ def drop_duplicate_actions():
 # Dựng dày chín khung mỗi nửa mới thấy: 0,78-1,08 giây dây cung căng hình chữ
 # V, tay phải kéo về sau, rồi 1,14 giây buông. ĐÓ LÀ MỘT CHU TRÌNH BẮN ĐẦY ĐỦ.
 SEGMENTS = [
-    ('01_DungVaBuoc',  1,  62),   # đứng thở, rồi bước lấn tới một nhịp
-    ('02_NhaoLon',    62, 138),   # bật nhảy, lộn trên không rồi tiếp đất
+    ('01_DungYen',     1,  62),   # đứng thở tại chỗ
+    ('02_GucNga',     62, 138),   # trúng đòn, ngã ngửa, nằm sấp dưới đất
     ('03_BanCung',   138, 173),   # với tay lấy tên, lắp, giương, buông dây
-    ('04_XoayNguoi', 173, 202),   # xoay người tại chỗ rồi về hướng cũ
+    ('04_TrungDon',  173, 202),   # giật người vì trúng đòn rồi đứng lại
 ]
 
 
@@ -578,20 +668,6 @@ def split_long_clip():
         if a.name not in dict(made):
             bpy.data.actions.remove(a)
 
-    # Action rời không tự đi vào file: bộ xuất glTF lấy hoạt ảnh từ các strip
-    # NLA. Bỏ bước này thì GLB ra 0,16 MB và không có clip nào.
-    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
-    if arm:
-        if not arm.animation_data:
-            arm.animation_data_create()
-        ad = arm.animation_data
-        ad.action = None
-        for t in list(ad.nla_tracks):
-            ad.nla_tracks.remove(t)
-        for name, _n in made:
-            track = ad.nla_tracks.new()
-            track.name = name
-            track.strips.new(name, 1, bpy.data.actions[name])
     print('    cắt clip dài thành %d đoạn: %s'
           % (len(made), ', '.join('%s %d khung' % m for m in made)))
 
@@ -753,6 +829,31 @@ def make_shoot_clip():
     return act
 
 
+def push_actions_to_nla():
+    """Đẩy mọi action lên strip NLA — bộ xuất glTF chỉ lấy hoạt ảnh từ đó.
+
+    Phải gọi SAU CÙNG. Trước đây bước này nằm ngay trong split_long_clip, và
+    hậu quả rất khó thấy: mọi hàm sau đó muốn đọc tư thế NGHỈ đều đặt
+    animation_data.action = None, nhưng NLA vẫn đang điều khiển bộ xương nên
+    thứ đọc được là một tư thế bất kỳ. Đo được: mũi tên lệch đúng 62° ở mọi
+    khung vì mốc nghỉ của nó lấy nhầm.
+    """
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    if arm is None:
+        return
+    if not arm.animation_data:
+        arm.animation_data_create()
+    ad = arm.animation_data
+    ad.action = None
+    for t in list(ad.nla_tracks):
+        ad.nla_tracks.remove(t)
+    for act in sorted(bpy.data.actions, key=lambda a: a.name):
+        track = ad.nla_tracks.new()
+        track.name = act.name
+        track.strips.new(act.name, 1, act)
+    print('    đẩy %d action lên NLA' % len(bpy.data.actions))
+
+
 def tidy_actions():
     """Đặt lại tên bảy clip Mixamo. Tên gốc kiểu
     'Armature.001|Armature.001|Armature.004|mixamo.com|Layer0.001' vừa dài vừa
@@ -820,8 +921,10 @@ def main():
         hide_arrow()
     drop_duplicate_actions()
     split_long_clip()
+    trim_death_tail()
     if not HIDE_ARROW:
         animate_arrow_shot()
+    push_actions_to_nla()
     shoot = make_shoot_clip() if MAKE_SHOOT else None
     if shoot is not None:
         ad = next(o for o in bpy.data.objects if o.type == 'ARMATURE').animation_data
