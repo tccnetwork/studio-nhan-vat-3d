@@ -242,7 +242,7 @@ table.rig td.arr { color: var(--muted); padding: 3px 6px; }
         <tr><td>LeftToeBase</td><td class="arr">→</td><td>L_ToeBase</td></tr>
       </table>
       <p style="margin:9px 0 0;font-size:11.5px;color:var(--muted)">
-        6 trong <span class="num">17</span> cặp. Số đốt sống bằng nhau nên ghép được
+        6 trong <span class="num">19</span> cặp. Số đốt sống bằng nhau nên ghép được
         một–một; phần còn lại của hai rig là xương phụ, không cần tới.
       </p>
     </div>
@@ -250,14 +250,15 @@ table.rig td.arr { color: var(--muted); padding: 3px 6px; }
     <div class="card">
       <h2>Số liệu</h2>
       <dl class="facts">
-        <dt>cặp xương ánh xạ</dt><dd>17</dd>
+        <dt>cặp xương ánh xạ</dt><dd>19</dd>
         <dt>xương nguồn</dt><dd>87</dd>
         <dt>xương đích</dt><dd>154</dd>
         <dt>tỉ lệ chiều dài</dt><dd>0,89–0,97</dd>
         <dt>clip chuyển được</dt><dd>5 / 5</dd>
         <dt>tổng số khung</dt><dd>198</dd>
         <dt>khoá bàn chân</dt><dd>172 lượt</dd>
-        <dt>GLB nén Draco</dt><dd>4,50 MB</dd>
+        <dt>trục ghim thêm</dt><dd>4</dd>
+        <dt>GLB nén Draco</dt><dd>4,52 MB</dd>
       </dl>
     </div>
   </div>
@@ -292,9 +293,31 @@ table.rig td.arr { color: var(--muted); padding: 3px 6px; }
       <span class="num">10</span> clip thay vì <span class="num">5</span>, năm
       clip thừa chính là quaternion Mixamo áp thẳng lên xương VRoid.</li>
 
-      <li><b>Cung và mũi tên không đi theo.</b> Chúng là lưới riêng gắn vào rig
-      của Erika, còn đây chỉ mượn động tác. Nên ở đoạn bắn cung, cô ca sĩ giương
-      cung rỗng.</li>
+      <li><b>Bám hướng thôi chưa đủ cho ba chỗ.</b> <code>_aim</code> chỉ ghim
+      <i>hướng</i> của đoạn xương, còn góc xoay quanh chính hướng đó vẫn tự do —
+      với xương chậu thì đoạn Hips→Spine gần như thẳng đứng, nên cái bị bỏ tự do
+      chính là hướng mặt. Đo được Erika xoay chậu tới
+      <span class="num">−56°</span> khi chạy còn cô ca sĩ đứng im trong
+      <span class="num">±4°</span>. Ghim thêm đường nối hai háng thì lệch về
+      <span class="num">0°</span> ở cả <span class="num">33</span> khung. Hai
+      bàn tay cũng ghim thế, bằng đường ngón trỏ–ngón út.</li>
+
+      <li><b>Xương đầu trước đó không được căn</b> — nó chỉ treo theo cổ, mà khi
+      chạy thì thân chúi tới, cổ chúi theo, thành ra cô ca sĩ cúi gằm mặt xuống
+      đất suốt đoạn di chuyển. Cả hai rig đều có xương mắt nên bám được hướng
+      nhìn: vector từ khớp đầu tới điểm giữa hai mắt. Hai rig đặt mắt khác chỗ —
+      đầu anime to hơn — nên phải trừ phần lệch sẵn <span class="num">36°</span>,
+      đo trên tư thế nghỉ của từng rig.</li>
+
+      <li><b>Cây cung sang được tay cô ca sĩ.</b> Nó skin vào chuỗi ba xương
+      riêng treo vào bàn tay trái, không nằm trong bảng ánh xạ. Dựng hệ trục bàn
+      tay từ giải phẫu — dọc lòng bàn tay tới ngón giữa, ngang lòng bàn tay từ
+      ngón trỏ sang ngón út — rồi lấy một phép đồng dạng đưa cả vùng bàn tay
+      Erika về vùng bàn tay cô ca sĩ, tỉ lệ <span class="num">0,86</span>. Đặt
+      xương và lưới bằng đúng phép ấy nên thế bind không đổi, skin giữ nguyên.
+      Riêng chuỗi xương cung thì chép thẳng góc xoay cục bộ được — chúng là bản
+      sao đồng dạng, cùng tư thế nghỉ — nhờ vậy cung vẫn nhún theo lúc giương.
+      Mũi tên và ống tên thì không mang sang.</li>
     </ol>
   </section>
 </div>

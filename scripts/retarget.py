@@ -52,8 +52,50 @@ BONE_MAP = [
     ('Foot_R',     'Toes_R',     'J_Bip_R_Foot',      'J_Bip_R_ToeBase'),
 ]
 
-# Xương đầu không có khớp con thật (BVH kết thúc bằng End Site rỗng), nên không
-# bám hướng được; nó giữ nguyên tư thế so với cổ.
+# Xương đầu không có khớp con thật (BVH kết thúc bằng End Site rỗng), nên với
+# nguồn BVH nó giữ nguyên tư thế so với cổ. Nhưng "giữ nguyên so với cổ" là sai
+# hẳn khi nhân vật chạy: thân chúi tới, cổ chúi theo, và cái đầu treo vào cổ thì
+# cúi gằm xuống đất trong khi nguồn vẫn ngẩng nhìn phía trước.
+#
+# Rig nào có xương mắt thì bám được hướng nhìn: vector từ khớp đầu tới điểm giữa
+# hai mắt. Hai rig đặt mắt ở chỗ khác nhau — đầu anime to hơn — nên phải trừ đi
+# phần lệch sẵn có, đo ngay trên tư thế NGHỈ của từng rig.
+HEAD = 'J_Bip_C_Head'
+HEAD_EYES = ('J_Adj_L_FaceEye', 'J_Adj_R_FaceEye')
+SRC_HEAD = None            # đặt tên xương đầu bên nguồn để bật phép căn này
+SRC_EYES = None
+
+
+def _look_dir(arm, head_name, eyes):
+    """Hướng nhìn ở frame hiện tại: từ khớp đầu tới điểm giữa hai mắt."""
+    hb = arm.pose.bones.get(head_name)
+    if hb is None:
+        return None
+    ps = []
+    for e in eyes:
+        pb = arm.pose.bones.get(e)
+        if pb is None:
+            return None
+        ps.append(arm.matrix_world @ pb.head)
+    d = (ps[0] + ps[1]) / 2.0 - (arm.matrix_world @ hb.head)
+    return d.normalized() if d.length > 1e-6 else None
+
+
+def _look_dir_rest(arm, head_name, eyes):
+    """Hướng nhìn ở tư thế nghỉ. Đọc từ data.bones chứ không phải pose.bones:
+    xoá action không làm pose channel trở về nghỉ, đọc pose là đọc phải tư thế
+    cũ còn sót."""
+    hb = arm.data.bones.get(head_name)
+    if hb is None:
+        return None
+    ps = []
+    for e in eyes:
+        b = arm.data.bones.get(e)
+        if b is None:
+            return None
+        ps.append(arm.matrix_world @ b.head_local)
+    d = (ps[0] + ps[1]) / 2.0 - (arm.matrix_world @ hb.head_local)
+    return d.normalized() if d.length > 1e-6 else None
 
 # Tên xương gốc của bộ xương NGUỒN. Bộ mocap BVH của dự án gọi nó là "Hips",
 # còn rig Mixamo gọi là "mixamorig:Hips" — đổi biến này là chuyển nguồn được,
@@ -110,6 +152,65 @@ def _aim(arm, bone_name, child_name, target_dir):
     m.translation = pb.matrix.translation      # giữ nguyên vị trí đầu xương
     pb.matrix = m
     bpy.context.view_layer.update()
+
+
+def _twist(arm, bone_name, axis, cur, tgt):
+    """Xoay xương quanh trục axis (đi qua đầu xương) cho cur trùng tgt.
+
+    _aim chỉ ghim HƯỚNG của đoạn xương, còn góc xoay quanh chính hướng đó vẫn
+    tự do. Với xương chậu thì đoạn Hips→Spine gần như thẳng đứng, nên cái bị bỏ
+    tự do chính là hướng mặt — nhân vật đi mà mặt không quay theo. Phải ghim
+    thêm bằng một trục thứ hai: đường nối hai khớp háng.
+    """
+    n = axis.normalized()
+    a = cur - n * cur.dot(n)          # chiếu vuông góc với trục xoay
+    b = tgt - n * tgt.dot(n)
+    if a.length < 1e-6 or b.length < 1e-6:
+        return
+    a.normalize()
+    b.normalize()
+    ang = math.atan2(a.cross(b).dot(n), a.dot(b))
+    if abs(ang) < 1e-6:
+        return
+    pb = arm.pose.bones[bone_name]
+    m = Quaternion(n, ang).to_matrix().to_4x4() @ pb.matrix
+    m.translation = pb.matrix.translation      # xoay quanh đầu xương
+    pb.matrix = m
+    bpy.context.view_layer.update()
+
+
+# Xương nào mà một hướng thôi chưa đủ thì ghim thêm trục thứ hai. Mỗi mục:
+#   xương đích -> (khớp đích a, khớp đích b, khớp nguồn a, khớp nguồn b)
+# Đường nối a→b là trục ngang cần khớp; phép xoay quay quanh chính hướng của
+# xương nên không phá hướng mà _aim vừa đặt.
+#
+# Chậu là chỗ bắt buộc: đoạn Hips→Spine gần như thẳng đứng nên góc quay quanh nó
+# — tức hướng mặt — bị bỏ tự do hoàn toàn, nhân vật đi mà thân không xoay theo.
+TWISTS = {
+    'J_Bip_C_Hips': ('J_Bip_L_UpperLeg', 'J_Bip_R_UpperLeg',
+                     'UpperLeg_L', 'UpperLeg_R'),
+}
+
+
+def _bone_gap(arm, a, b):
+    pa = arm.pose.bones.get(a)
+    pb = arm.pose.bones.get(b)
+    if pa is None or pb is None:
+        return None
+    return (arm.matrix_world @ pb.head) - (arm.matrix_world @ pa.head)
+
+
+def _apply_twist(char_arm, src_arm, dst, dst_child):
+    ref = TWISTS.get(dst)
+    if ref is None:
+        return
+    da, db, sa, sb = ref
+    axis = _joint_dir(char_arm, dst, dst_child)
+    cur = _bone_gap(char_arm, da, db)
+    tgt = _bone_gap(src_arm, sa, sb)
+    if axis is None or cur is None or tgt is None:
+        return
+    _twist(char_arm, dst, axis, cur, tgt)
 
 
 def _lowest_point(char_arm):
@@ -652,6 +753,18 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
     act = bpy.data.actions.new(name=clip_name)
     char_arm.animation_data.action = act
 
+    # Tra ngược tên xương nguồn theo tên xương đích, để phép ghim hướng mặt
+    # dùng được với mọi bảng ánh xạ chứ không chỉ bảng BVH.
+    # Phần lệch sẵn có giữa hai hướng nhìn lúc nghỉ, để trừ đi khi căn đầu.
+    q_head = None
+    if SRC_HEAD and SRC_EYES:
+        a = _look_dir_rest(bvh_arm, SRC_HEAD, SRC_EYES)
+        b = _look_dir_rest(char_arm, HEAD, HEAD_EYES)
+        if a is not None and b is not None:
+            q_head = a.rotation_difference(b)
+            print('    căn hướng nhìn: lệch sẵn %.0f° giữa hai rig'
+                  % math.degrees(a.angle(b)))
+
     hips_pb = char_arm.pose.bones['J_Bip_C_Hips']
     hips_rest = char_arm.data.bones['J_Bip_C_Hips'].head_local.copy()
 
@@ -698,7 +811,25 @@ def retarget(char_arm, bvh_arm, clip_name, frames=None,
             if pb is None or tgt is None:
                 continue
             _aim(char_arm, dst, dst_child, tgt)
+            # Chậu phải ghim thêm hướng mặt, và phải ghim NGAY tại đây: hai
+            # xương đùi treo vào chậu, xoay chậu sau khi đã căn chân là hỏng
+            # hướng chân.
+            _apply_twist(char_arm, bvh_arm, dst, dst_child)
             pb.keyframe_insert(data_path='rotation_quaternion', frame=out_frame)
+
+        # --- đầu: bám hướng nhìn, làm sau cùng vì không xương nào treo vào nó
+        if q_head is not None:
+            want = q_head @ _look_dir(bvh_arm, SRC_HEAD, SRC_EYES)
+            cur = _look_dir(char_arm, HEAD, HEAD_EYES)
+            if cur is not None:
+                pb = char_arm.pose.bones[HEAD]
+                m = (cur.rotation_difference(want).to_matrix().to_4x4()
+                     @ pb.matrix)
+                m.translation = pb.matrix.translation
+                pb.matrix = m
+                bpy.context.view_layer.update()
+                pb.keyframe_insert(data_path='rotation_quaternion',
+                                   frame=out_frame)
         hips_pb.keyframe_insert(data_path='location', frame=out_frame)
 
         lowest.append(_lowest_point(char_arm))
