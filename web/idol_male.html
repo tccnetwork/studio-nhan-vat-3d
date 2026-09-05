@@ -185,13 +185,16 @@ table.cmp td.new { color: var(--accent); }
         <tr><td>hông</td><td colspan="2" class="new">thu ×0,90</td></tr>
         <tr><td>cổ</td><td colspan="2" class="new">dày ×1,16</td></tr>
         <tr><td>tay</td><td colspan="2" class="new">dày ×1,12</td></tr>
-        <tr><td>mắt</td><td colspan="2" class="new">ngang ×0,90 dọc ×0,76</td></tr>
+        <tr><td>đầu</td><td colspan="2" class="new">thu ×0,90, ~7,8 đầu</td></tr>
+        <tr><td>mắt</td><td colspan="2" class="new">×0,90 / ×0,76, hất 7°</td></tr>
+        <tr><td>chân mày</td><td colspan="2" class="new">dày ×1,55, bớt cong</td></tr>
+        <tr><td>má</td><td colspan="2" class="new">thon ×0,92</td></tr>
         <tr><td>quai hàm</td><td colspan="2" class="new">bạnh ×1,08</td></tr>
         <tr><td>cằm</td><td colspan="2" class="new">nới ×1,50 ở đáy</td></tr>
         <tr><td>mũi</td><td colspan="2" class="new">dài ×1,22, ra 5 mm</td></tr>
         <tr><td>miệng</td><td colspan="2" class="new">khép còn 35%</td></tr>
         <tr><td>da</td><td colspan="2" class="new">sáng 0,86 → 0,55</td></tr>
-        <tr><td>tóc</td><td colspan="2" class="new">cắt ngắn trên tai</td></tr>
+        <tr><td>tóc</td><td colspan="2" class="new">ngắn, vuốt lệch, phồng đỉnh</td></tr>
         <tr><td>lưới đầu</td><td colspan="2" class="new">vá 5 mảng hở</td></tr>
       </table>
     </div>
@@ -222,6 +225,16 @@ table.cmp td.new { color: var(--accent); }
       miệng theo chiều dọc còn <span class="num">30%</span>, và nén CẢ vùng chứ
       không riêng lưới trong miệng, vì lưới da có lỗ ở chỗ ấy — thu mỗi phần trong
       thì hở ra nhìn thấu vào trong đầu.</li>
+
+      <li><b>Bộ cắt tóc không hở nổi chân mày.</b> Nó coi
+      <span class="num">z=1,48</span> là chân tóc và giữ nguyên tuyệt đối mọi thứ
+      bên trên — mà chân mày của cái đầu này nằm đúng ở
+      <span class="num">1,48</span>. Nên hạ tham số cắt tới đâu, mái vẫn trùm
+      chân mày, che mất đúng cái vừa làm dày cho ra nét nam. Phải tỉa mái riêng,
+      cao hơn mốc ấy — và tỉa theo TỈ LỆ độ rủ để các lọn vẫn so le, chứ cắt
+      bằng nhau thì lại thành kiểu úp bát. Tắt dần theo bề ngang chứ không cắt
+      cứng: cắt cứng thì lọn nào vắt qua ranh giới bị xé đôi, để lại hai mảng
+      tóc vuông lòi ra ở thái dương.</li>
 
       <li><b>Lưới đầu VRoid vốn hở, và cắt tóc ngắn thì lộ ra.</b> Nó có một
       mảng hở lớn ở sau sọ — vòng biên <span class="num">88</span> cạnh, chu vi

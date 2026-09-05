@@ -42,6 +42,13 @@ ARM_THICK    = 1.12
 LEG_THICK    = 1.05
 HEIGHT       = 1.045      # 1,60 m -> 1,67 m
 
+# Đầu nhỏ lại so với thân. Đây là đòn bẩy mạnh nhất cho việc "trông lớn hơn":
+# model gốc cao khoảng 7 đầu, hạ đầu 10% thì thành gần 7,8 đầu — tỉ lệ người
+# lớn. Thu theo ba trục khác nhau: bớt bề ngang và bề sâu nhiều hơn bề cao, để
+# khuôn mặt dài ra chứ không chỉ bé đi.
+HEAD_SCALE = (0.90, 0.90, 0.96)
+HEAD_PIVOT_Z = 1.386      # khớp đầu, cũng là chỗ nối với cổ nên không hở mối
+
 # Ngực: đẩy mặt trước lùi lại, mạnh nhất ở đúng cao độ nhô ra nhiều nhất.
 BUST_Z    = 1.150         # đo được mặt trước nhô tới y = -0,132 quanh đây
 BUST_SPAN = 0.075
@@ -74,11 +81,23 @@ NOSE_TALL = 1.22          # kéo cao vùng mũi quanh chính tâm nó
 # so với 9%. Hệ số cần khoảng 2,3 ở đáy, tắt dần về 1,0 ở mức 20%.
 CHIN_Z = 1.487            # trùng quãng tắt của quai hàm, để không thành bậc
 CHIN_BOTTOM = 1.412
-CHIN_WIDE = 1.50          # hệ số ở đúng đáy cằm, nhân thêm với JAW_WIDE
+CHIN_WIDE = 1.30          # hệ số ở đúng đáy cằm, nhân thêm với JAW_WIDE
 
 EYE_SHRINK_X = 0.90
 EYE_SHRINK_Z = 0.76
 BROW_DOWN  = 0.005        # m, hạ chân mày xuống sát mắt
+# Chân mày gốc là một dải mảnh 6 mm, cong vòng cung — đọc ra rất nữ. Làm dày và
+# thẳng: dày là nhân bề cao quanh tâm dải, thẳng là kéo từng đỉnh về cao độ
+# trung bình của chính dải đó.
+BROW_THICK = 1.55
+BROW_STRAIGHT = 0.45      # kéo bao nhiêu phần về đường ngang
+# Mắt: hất đuôi mắt lên. Xoay quanh tâm TỪNG BÊN, dấu ngược nhau, nếu không thì
+# hai mắt cùng nghiêng một chiều thành ra méo mặt.
+EYE_TILT_DEG = 7.0
+# Má thon lại. Quai hàm bạnh ra mà má vẫn tròn thì khuôn mặt đọc ra "bầu bĩnh";
+# thon phần trên hàm mới ra được nét vát.
+CHEEK_Z0, CHEEK_Z1 = 1.455, 1.535
+CHEEK_NARROW = 0.92
 JAW_WIDE   = 1.08         # bạnh quai hàm
 JAW_Z      = 1.480        # sau khi đã kéo cao 4,5%, cằm nằm ở 1,413
 JAW_SPAN   = 0.055
@@ -101,6 +120,7 @@ GROUPS = {
     'neck': lambda n: 'C_Neck' in n,
     'leg':  lambda n: any(k in n for k in ('UpperLeg', 'LowerLeg', '_Foot',
                                            'ToeBase')),
+    'head': lambda n: any(k in n for k in ('C_Head', 'Adj_', 'Sec_Hair')),
 }
 
 
@@ -144,6 +164,12 @@ def warp(p, m):
         q.y += BUST_PUSH * hump * m['chest']
         if q.y > 0.0:
             q.y = 0.0
+
+    if m['head'] > 0.0:
+        k = [1.0 + (v - 1.0) * m['head'] for v in HEAD_SCALE]
+        q.x *= k[0]
+        q.y *= k[1]
+        q.z = HEAD_PIVOT_Z + (q.z - HEAD_PIVOT_Z) * k[2]
 
     q.z *= HEIGHT
     return q
@@ -285,17 +311,31 @@ def reshape_face(face):
                 d = p - c
                 d.x *= EYE_SHRINK_X
                 d.z *= EYE_SHRINK_Z
+                # hất đuôi mắt: xoay trong mặt phẳng (x, z) quanh tâm mắt
+                a = math.radians(EYE_TILT_DEG) * side
+                dx, dz = d.x, d.z
+                d.x = dx * math.cos(a) - dz * math.sin(a)
+                d.z = dx * math.sin(a) + dz * math.cos(a)
                 face.data.vertices[i].co = inv @ (c + d)
-        print('    mắt: thu %d đỉnh, ngang ×%.2f dọc ×%.2f quanh tâm từng bên'
-              % (len(eyes), EYE_SHRINK_X, EYE_SHRINK_Z))
-    for i in brow:
-        p = mw @ face.data.vertices[i].co
-        p.z -= BROW_DOWN
-        face.data.vertices[i].co = inv @ p
+        print('    mắt: thu %d đỉnh, ngang ×%.2f dọc ×%.2f, hất đuôi %.0f°'
+              % (len(eyes), EYE_SHRINK_X, EYE_SHRINK_Z, EYE_TILT_DEG))
     if brow:
-        print('    chân mày: hạ %d đỉnh xuống %.0f mm' % (len(brow), BROW_DOWN * 1000))
+        zs = [(mw @ face.data.vertices[i].co).z for i in brow]
+        mid = sum(zs) / len(zs)
+        for i in brow:
+            p = mw @ face.data.vertices[i].co
+            p.z = mid + (p.z - mid) * (1.0 - BROW_STRAIGHT)   # bớt cong
+            p.z = mid + (p.z - mid) * BROW_THICK              # dày lên
+            p.z -= BROW_DOWN
+            face.data.vertices[i].co = inv @ p
+        print('    chân mày: %d đỉnh, dày ×%.2f, bớt cong %.0f%%, hạ %.0f mm'
+              % (len(brow), BROW_THICK, BROW_STRAIGHT * 100, BROW_DOWN * 1000))
     def jaw_chin(p):
         q = p.copy()
+        # má: một cái bướu mềm giữa hai mốc, mạnh nhất ở giữa
+        t = (q.z - CHEEK_Z0) / (CHEEK_Z1 - CHEEK_Z0)
+        if 0.0 < t < 1.0:
+            q.x *= 1.0 + (CHEEK_NARROW - 1.0) * math.sin(math.pi * t)
         w = 1.0 - smoothstep(JAW_Z - JAW_SPAN, JAW_Z, q.z)
         if w > 0.001:
             q.x *= 1.0 + (JAW_WIDE - 1.0) * w
@@ -481,13 +521,81 @@ def strip_hair_back(body):
     print('    bỏ %d mặt tóc sau lưng khỏi lưới thân' % len(doomed))
 
 
+# Vuốt mái và nâng phồng đỉnh, làm trên toạ độ TRƯỚC khi nắn dáng nên dùng
+# chung mốc với bộ cắt tóc: chân tóc ở z = 1,48.
+HAIR_LINE = 1.48
+# Bộ cắt tóc coi z = 1,48 là chân tóc và giữ nguyên tuyệt đối mọi thứ bên trên,
+# nhưng chân mày của cái đầu này nằm đúng ở 1,48 — nên dù hạ z_back tới đâu,
+# mái vẫn trùm chân mày. Phải tỉa mái riêng, cao hơn mốc ấy.
+FRINGE_Z = 1.505          # mốc tỉa mái, cao hơn chân tóc của bộ cắt
+FRINGE_KEEP = 0.30        # giữ lại bao nhiêu phần độ rủ; giữ theo TỈ LỆ nên
+                          # các lọn vẫn so le, không thành đường cắt ngang bằng
+FRINGE_HALF = 0.090       # nửa bề rộng vùng mái trước, tắt dần từ 55%
+SWEEP = 0.014             # m, đẩy mái sang một bên ở chỗ dài nhất
+SWEEP_DEPTH = 0.055       # quãng ăn dần từ chân tóc xuống
+CROWN_Z0, CROWN_Z1 = 1.500, 1.585
+CROWN_LIFT = 0.011        # m, nâng đỉnh cho có khối
+CROWN_OUT = 1.055         # nở bán kính vùng đỉnh
+HEAD_AXIS_Y = 0.015
+
+
+def style_hair(hair):
+    """Vuốt mái lệch một bên và nâng phồng đỉnh.
+
+    Bộ cắt tóc chỉ rút ngắn theo trục Z nên giữ nguyên dáng bát úp của mái tóc
+    nữ: mái trước cắt ngang bằng, đỉnh ôm sát sọ. Hai phép ở đây phá cái đó —
+    trượt mái sang bên theo độ sâu dưới chân tóc, và nở vùng đỉnh ra.
+
+    Chỉ đụng vào phần TRƯỚC cho phép vuốt mái: lấy cả vòng thì tóc gáy cũng
+    lệch theo, thành ra cái đầu như bị gió thổi ngang.
+    """
+    mw = hair.matrix_world
+    inv = mw.inverted()
+    n_sweep = n_crown = n_trim = 0
+    for v in hair.data.vertices:
+        p = mw @ v.co
+        # Tắt dần theo bề ngang chứ không cắt cứng: cắt cứng thì lọn nào vắt
+        # qua ranh giới bị xé đôi, để lại hai mảng tóc vuông lòi ra ở thái dương.
+        if p.y < -0.005 and p.z < FRINGE_Z:
+            w = 1.0 - smoothstep(FRINGE_HALF * 0.55, FRINGE_HALF, abs(p.x))
+            w *= smoothstep(-0.005, -0.030, p.y)
+            if w > 0.001:
+                keep = 1.0 - (1.0 - FRINGE_KEEP) * w
+                p.z = FRINGE_Z - (FRINGE_Z - p.z) * keep
+                n_trim += 1
+        d = HAIR_LINE - p.z
+        if p.y < -0.010 and d > 0.0:
+            f = smoothstep(0.0, SWEEP_DEPTH, d)
+            if f > 0.0:
+                p.x += SWEEP * f
+                n_sweep += 1
+        r = smoothstep(CROWN_Z0, CROWN_Z1, p.z)
+        if r > 0.0:
+            p.z += CROWN_LIFT * r
+            p.x *= 1.0 + (CROWN_OUT - 1.0) * r
+            p.y = HEAD_AXIS_Y + (p.y - HEAD_AXIS_Y) * (1.0 + (CROWN_OUT - 1.0) * r)
+            n_crown += 1
+        v.co = inv @ p
+    hair.data.update()
+    print('    tóc: tỉa %d đỉnh mái, vuốt lệch %d, nâng phồng %d'
+          % (n_trim, n_sweep, n_crown))
+
+
 def short_hair(arm):
     """Cắt tóc dài thành kiểu ngắn nam, dùng lại bộ cắt của dự án."""
     import hairstyles
     # Vạt hai bên là chi tiết đọc ra "nữ" mạnh nhất: bob rẽ ngôi giữa với hai
     # lọn dài tới cằm. z_side phải cao hơn z_back để cắt cụt hẳn hai lọn ấy.
-    hairstyles.STYLES = [dict(name='Hair_Male', z_back=1.452, z_side=1.470,
-                              u_curve_depth=0.004, hang=0.02, evenness=0.10)]
+    #
+    # z_back phải đủ CAO để hở chân mày. Mái dài trùm chân mày thì che mất đúng
+    # cái vừa làm dày cho ra nét nam, và đọc ra kiểu tóc che mặt chứ không phải
+    # tóc nam gọn.
+    #
+    # evenness để CAO chứ không thấp. Với tóc nữ cắt bob thì số nhỏ mới đẹp, vì
+    # nó kéo các lọn về cùng một đường cắt cho gọn. Ở đây ngược lại: đường cắt
+    # gọn quá thành ra kiểu úp bát, còn để các lọn so le mới ra tóc nam tỉa lớp.
+    hairstyles.STYLES = [dict(name='Hair_Male', z_back=1.476, z_side=1.482,
+                              u_curve_depth=0.004, hang=0.02, evenness=0.45)]
     made = hairstyles.build_hairstyles(arm)
     old = bpy.data.objects.get('Hair')
     if old is not None:
@@ -496,6 +604,8 @@ def short_hair(arm):
         o.name = 'Hair'
         o.hide_render = False
         o.hide_viewport = False
+    for o in made:
+        style_hair(o)
     print('    tóc: cắt ngắn, còn %d lưới tóc'
           % len([o for o in bpy.data.objects
                  if o.type == 'MESH' and 'Hair' in o.name]))
