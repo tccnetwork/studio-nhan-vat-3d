@@ -21,6 +21,7 @@ vặn xoắn. Xbot đã có idle/walk/run nên không mất gì.
 Chỉ chiều cao hông là phải bù: các nhân vật cao thấp khác nhau 3–14%, nên kênh
 tịnh tiến của xương hông được nhân theo đúng tỉ lệ ấy.
 """
+import math
 import os
 import sys
 
@@ -517,6 +518,226 @@ def push_nla(arm, names):
 
 ALPHA_CUTOFF = 0.5
 
+# --- Chớp mắt --------------------------------------------------------------
+# Nhân vật Mixamo không có khẩu hình nào, y như cung thủ char6. Nặn một cái từ
+# chính hình học: kéo mí trên xuống đường giữa mắt.
+BLINK_KEY = 'NhamMat'
+FACE_CLIP = 'Mat_ChopMat'
+FACE_SECONDS = 18.0
+BLINK_AT = (2.4, 6.9, 11.2, 11.7, 16.3)   # giây; hai cú sát nhau là chớp kép
+BLINK_DOWN, BLINK_UP = 0.05, 0.09         # giây để nhắm và để mở
+LID_PUSH = 0.0016         # m, đẩy mí ra trước cho ôm cầu mắt
+LOWER_PULL = 0.30         # mí dưới nhích lên bằng 30% mí trên
+CLOSE_LINE = 0.30         # đường khép nằm dưới tâm mắt 30% nửa-cao
+EYE_DEPTH = 0.035         # m, chỉ đụng tới lớp mặt trước; gáy cùng độ cao thì tha
+# Mắt RỘNG 46 mm mà chỉ CAO 19 mm. Vùng ảnh hưởng tròn muốn phủ hết bề ngang
+# thì tất yếu vơ luôn lông mày (cách tâm mắt 23 mm) và kéo nó sụp xuống. Nên
+# hai trục phải nới riêng, và trục dọc phải dừng trước chân mày.
+REACH_X, REACH_UP, REACH_DOWN = 1.35, 1.80, 2.40
+FULL = 0.40               # trong ngần này thì khép hết cỡ
+MIN_VERTS = 150           # ít hơn ngần này nghĩa là chỗ đó không có mắt
+
+# Suy vị trí mắt theo tỉ lệ hộp sọ, đo từ hàng mi của af1 (mốc chắc chắn: nó
+# là một lưới riêng). Dùng cho nhân vật gộp hết vào một lưới như af2.
+EYE_OF_HEAD = dict(z=0.462, x=0.409, y=0.126, rx=0.261, rz=0.0422)
+
+
+def smoothstep(a, b, x):
+    t = min(1.0, max(0.0, (x - a) / (b - a)))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def head_box(arm, meshes):
+    """Hộp sọ: các đỉnh bám xương đầu và nằm trên khớp cổ."""
+    hb = next((b for b in arm.data.bones if b.name.lower().endswith('head')), None)
+    if hb is None:
+        return None
+    base = (arm.matrix_world @ hb.head_local).z
+    pts = []
+    for m in meshes:
+        g = m.vertex_groups.get(hb.name)
+        if g is None:
+            continue
+        mw = m.matrix_world
+        for v in m.data.vertices:
+            if any(vg.group == g.index and vg.weight > 0.5 for vg in v.groups):
+                p = mw @ v.co
+                if p.z > base:
+                    pts.append(p)
+    if len(pts) < 200:
+        return None
+    return (base, max(p.z for p in pts), max(abs(p.x) for p in pts),
+            min(p.y for p in pts), max(p.y for p in pts))
+
+
+def _pair(pts, tag):
+    """Chẻ một đám điểm thành mắt phải / mắt trái, trả về (tâm, nửa-rộng, nửa-cao)."""
+    out = []
+    for pick in (lambda p: p.x > 0.008, lambda p: p.x < -0.008):
+        side = [p for p in pts if pick(p)]
+        if len(side) < 12:
+            return None
+        c = sum(side, Vector()) / len(side)
+        rx = (max(p.x for p in side) - min(p.x for p in side)) / 2
+        rz = (max(p.z for p in side) - min(p.z for p in side)) / 2
+        out.append((c, max(0.010, rx), max(0.006, rz)))
+    print('    mốc: %s' % tag)
+    return out
+
+
+def find_eyes(arm, meshes):
+    """Trả về [(tâm, nửa-rộng, nửa-cao)] cho mắt phải và mắt trái.
+
+    Rig Mixamo 65 xương không có xương mắt, nên phải đọc từ hình học. Mốc là
+    HÀNG MI. Nó luôn dùng chung vật liệu với tóc, nên lọc theo vật liệu thôi thì
+    ra cả mái tóc. Hai điều kiện nữa mới tách được: chỉ lấy NỬA TRƯỚC của đầu
+    (bỏ tóc mai vòng ra sau), rồi trong đó lấy DẢI THẤP NHẤT 20 mm (bỏ mái và
+    chỏm). Thử trên af1 — nơi hàng mi là lưới riêng nên biết trước đáp án — quy
+    tắc này ra đúng 375 đỉnh mỗi bên, lệch tâm 0,1 mm.
+    """
+    lash = []
+    for m in meshes:
+        low = m.name.lower()
+        # "Eyeleashes" là lỗi chính tả có thật trong file gốc của Ch37.
+        if 'lash' in low or 'leash' in low or low.endswith(('_eye', '_eyes')):
+            lash += [m.matrix_world @ v.co for v in m.data.vertices]
+    got = _pair(lash, 'lưới hàng mi riêng') if lash else None
+    if got:
+        return got
+
+    box = head_box(arm, meshes)
+    if box is not None:
+        base, top, W, y0, y1 = box
+        cut = y0 + 0.30 * (y1 - y0)
+        pts = []
+        for m in meshes:
+            idx = [i for i, mt in enumerate(m.data.materials)
+                   if mt and 'hair' in mt.name.lower()]
+            if not idx:
+                continue
+            keep = set()
+            for poly in m.data.polygons:
+                if poly.material_index in idx:
+                    keep.update(poly.vertices)
+            mw = m.matrix_world
+            pts += [q for q in (mw @ m.data.vertices[i].co for i in keep)
+                    if q.y < cut and q.z > base]
+        if pts:
+            z0 = min(p.z for p in pts)
+            got = _pair([p for p in pts if p.z < z0 + 0.020],
+                        'dải mi thấp nhất trong vật liệu tóc')
+            if got:
+                return got
+
+    if box is None:
+        return None
+    # Cùng đường: đoán theo tỉ lệ hộp sọ đo được từ af1.
+    base, top, W, y0, y1 = box
+    r = EYE_OF_HEAD
+    h, d = top - base, y1 - y0
+    print('    mốc: tỉ lệ hộp sọ (cao %.0f mm)' % (h * 1000))
+    return [(Vector((k * r['x'] * W, y0 + r['y'] * d, base + r['z'] * h)),
+             r['rx'] * W, r['rz'] * h) for k in (1.0, -1.0)]
+
+
+def add_blink(arm, meshes):
+    """Nặn khẩu hình nhắm mắt: hạ mí trên xuống đường khép, mí dưới nhích lên."""
+    eyes = find_eyes(arm, meshes)
+    if eyes is None:
+        print('    không định vị được mắt, bỏ qua chớp mắt')
+        return []
+    for c, rx, rz in eyes:
+        print('    mắt (%.3f, %.3f, %.3f)  rộng %.1f mm  cao %.1f mm'
+              % (c.x, c.y, c.z, rx * 2000, rz * 2000))
+    made = []
+    for m in meshes:
+        low = m.name.lower()
+        if 'hair' in low and 'lash' not in low:
+            continue          # tóc mái không nhắm theo mắt
+        mw = m.matrix_world
+        inv = mw.inverted()
+        key = None
+        moved = 0
+        for v in m.data.vertices:
+            p = mw @ v.co
+            for c, rx, rz in eyes:
+                if abs(p.y - c.y) > EYE_DEPTH:
+                    continue
+                dz = p.z - c.z
+                up = REACH_UP if dz > 0 else REACH_DOWN
+                d = math.hypot(dz / (rz * up), (p.x - c.x) / (rx * REACH_X))
+                w = 1.0 - smoothstep(FULL, 1.0, d)
+                if w <= 0.002:
+                    continue
+                if key is None:
+                    if m.data.shape_keys is None:
+                        m.shape_key_add(name='Basis', from_mix=False)
+                    key = m.shape_key_add(name=BLINK_KEY, from_mix=False)
+                line = c.z - CLOSE_LINE * rz
+                q = p.copy()
+                q.z = p.z + w * (line - p.z) * (1.0 if p.z > line else LOWER_PULL)
+                q.y -= LID_PUSH * w
+                key.data[v.index].co = inv @ q
+                moved += 1
+                break
+        if key is None:
+            continue
+        if moved < MIN_VERTS:
+            # Ma-nơ-canh không có mắt: mặt nó trơn, chỉ vài chục đỉnh lọt vào
+            # vùng ước lượng. Nặn ở đó chỉ làm móp mặt chứ không thành cái chớp.
+            m.shape_key_remove(key)
+            if len(m.data.shape_keys.key_blocks) == 1:
+                m.shape_key_remove(m.data.shape_keys.key_blocks[0])
+            print('    %s: chỉ %d đỉnh quanh mắt, bỏ qua' % (m.name, moved))
+            continue
+        made.append(m.name)
+        print('    %s: nặn "%s" trên %d đỉnh' % (m.name, BLINK_KEY, moved))
+    return made
+
+
+def animate_blink(meshes, names):
+    """Một clip mặt dài 18 giây, lặp độc lập với clip thân.
+
+    Mỗi lưới phải có action riêng vì Blender không cho hai action trùng tên, và
+    bộ xuất glTF đặt tên hoạt ảnh theo tên action. Trang xem phát mọi clip có
+    tiền tố Mat_ nên vẫn khớp nhau.
+    """
+    n = FACE_SECONDS * 30.0
+    made = []
+    for i, nm in enumerate(names):
+        m = bpy.data.objects.get(nm)
+        keys = m.data.shape_keys if m else None
+        if keys is None:
+            continue
+        if keys.animation_data is None:
+            keys.animation_data_create()
+        ad = keys.animation_data
+        ad.action = None
+        for t in list(ad.nla_tracks):
+            ad.nla_tracks.remove(t)
+        name = FACE_CLIP if i == 0 else '%s_%d' % (FACE_CLIP, i)
+        act = bpy.data.actions.new(name)
+        fc = act.fcurves.new('key_blocks["%s"].value' % BLINK_KEY)
+        fc.keyframe_points.insert(1.0, 0.0).interpolation = 'LINEAR'
+        for t in BLINK_AT:
+            for off, val in ((-BLINK_DOWN, 0.0), (0.0, 1.0), (BLINK_UP, 0.0)):
+                x = max(1.0, min(n, (t + off) * 30.0))
+                fc.keyframe_points.insert(x, val).interpolation = 'LINEAR'
+        fc.keyframe_points.insert(n, 0.0).interpolation = 'LINEAR'
+        fc.update()
+        act.use_fake_user = True
+        tr = ad.nla_tracks.new()
+        tr.name = name
+        st = tr.strips.new(name, 1, act)
+        # Blender 4.4+ dùng action có "ngăn": gán action vào strip thôi thì ngăn
+        # vẫn trống và strip không điều khiển gì cả.
+        if hasattr(st, 'action_slot') and act.slots:
+            st.action_slot = act.slots[0]
+        made.append(name)
+    print('    clip mặt: %.0f giây, %d cú chớp, trên %d lưới'
+          % (FACE_SECONDS, len(BLINK_AT), len(names)))
+    return made
+
 
 def patch_alpha_mode(path):
     """Đổi alphaMode BLEND thành MASK ngay trong file glTF đã xuất.
@@ -597,8 +818,15 @@ def build(src, tag, own_name='00_DamBao'):
     print('>>> Nạp kho động tác')
     keep += load_clips(arm)
 
+    print('>>> Chớp mắt')
+    meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+    face = animate_blink(meshes, add_blink(arm, meshes))
+
     ground_clips(arm, keep, meshes)
     push_nla(arm, keep)
+    # Clip mặt nằm trên datablock khẩu hình, không phải bộ xương, nên chỉ thêm
+    # vào danh sách giữ SAU khi đã dàn chân và dựng NLA cho thân.
+    keep += face
     for a in list(bpy.data.actions):
         if a.name not in keep:
             bpy.data.actions.remove(a)

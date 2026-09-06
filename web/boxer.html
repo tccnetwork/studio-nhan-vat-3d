@@ -167,6 +167,7 @@ dl.facts dd {
         <dt>xương mỗi người</dt><dd>65</dd>
         <dt>đỉnh</dt><dd>14k – 35k</dd>
         <dt>clip</dt><dd>1 → <b>17</b></dd>
+        <dt>chớp mắt</dt><dd>5 cú / 18 s · 4 người</dd>
         <dt>bộ trang phục</dt><dd>2–3</dd>
         <dt>texture</dt><dd>4096² → 1024²</dd>
         <dt>FBX gốc</dt><dd>34 – 50 MB</dd>
@@ -236,6 +237,17 @@ dl.facts dd {
       <span class="num">17</span> clip chạm sàn trong <span class="num">±5</span> mm.
       Hai clip còn lại là hai cú ngã, lún <span class="num">4</span> cm vì lúc nằm
       thì vai chạm đất chứ không phải giày.</li>
+
+      <li><b>Mặt không có khẩu hình nào.</b> Rig Mixamo <span class="num">65</span>
+      xương không có xương mắt và không có blendshape, nên chớp mắt phải nặn từ
+      hình học. Mốc là <b>hàng mi</b>; ai để hàng mi thành lưới riêng thì đo
+      thẳng, ai gộp hết vào một lưới thì suy theo tỉ lệ hộp sọ đo được từ người
+      kia. Vùng ảnh hưởng phải là <b>bầu dục</b>: mắt rộng
+      <span class="num">43</span> mm mà chỉ cao <span class="num">19</span> mm,
+      nên vùng tròn phủ hết bề ngang sẽ vơ luôn lông mày cách đó
+      <span class="num">23</span> mm và kéo nó sụp xuống. Ma-nơ-canh mặt trơn,
+      không có mắt: chỉ <span class="num">32</span> đỉnh lọt vào vùng ước lượng
+      nên nó được bỏ qua thay vì bị móp mặt.</li>
     </ol>
   </section>
 </div>
@@ -356,8 +368,12 @@ function load(who) {
     root.visible = false;
     scene.add(root);
     const mixer = new THREE.AnimationMixer(root);
-    const clips = new Map(gltf.animations.map(c => [c.name, c]));
-    cache[who] = { root, mixer, clips };
+    // Clip mặt (chớp mắt) nằm trên khẩu hình, chạy song song và lặp mãi, nên
+    // tách khỏi danh sách nút bấm — nó không phải một động tác để chọn.
+    const face = gltf.animations.filter(c => /^Mat_/.test(c.name));
+    const clips = new Map(gltf.animations
+      .filter(c => !/^Mat_/.test(c.name)).map(c => [c.name, c]));
+    cache[who] = { root, mixer, clips, face };
     document.getElementById('busy').hidden = true;
     res(cache[who]);
   }, undefined, rej));
@@ -371,6 +387,7 @@ async function pick(who) {
   const set = await load(who);
   cur = set;
   cur.root.visible = true;
+  cur.face.forEach(c => cur.mixer.clipAction(c).reset().play());
   action = null;
   frame();
   buildWear(who);
