@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Hai Võ Sĩ</title>
+<title>Hai Võ Sĩ Và Một Hình Nộm</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root {
@@ -112,7 +112,7 @@ dl.facts dd {
 <body>
 <div class="wrap">
   <header>
-    <h1>Hai Võ Sĩ <em>— mượn hết kho động tác</em></h1>
+    <h1>Hai Võ Sĩ <em>và một hình nộm</em></h1>
     <p class="sub">Hai nhân vật Mixamo đưa vào chỉ mang theo <b>một</b> hoạt ảnh, giờ
     có <span class="num">17</span>: một của chính họ, sáu của hiệp sĩ, năm của cung thủ,
     năm từ thư viện Mixamo. Không phải chuyển động tác — bốn rig này cùng chuẩn nên
@@ -132,6 +132,7 @@ dl.facts dd {
       <div class="btns">
         <button id="who-nam" class="on">Nam</button>
         <button id="who-nu">Nữ</button>
+        <button id="who-mano">Hình nộm</button>
       </div>
     </div>
 
@@ -199,6 +200,16 @@ dl.facts dd {
       lửng vì thấy ảnh nối vào một ô tên “Color”, nhưng đó chính là đầu vào của node
       Normal Map.</li>
 
+      <li><b>Hình nộm mới là nền để mặc đồ.</b> <code>body.fbx</code> là một lưới
+      duy nhất trải từ <span class="num">z 0,00</span> tới
+      <span class="num">1,68</span> m — thân trọn vẹn, không mặt, không tóc, không
+      quần áo. Mặc gì lên cũng có thân thật bên dưới. Nhưng đồ may vừa người này
+      thì chật với người kia, và cách sửa <b>không</b> phải thu người lại: chi thể
+      chỉ dày <span class="num">5–7</span> cm nên bù vào từ hai phía là gần như
+      sập — thử ở <span class="num">14</span> mm đã nát ngón tay, ở
+      <span class="num">20</span> mm nát cả tay chân. Nới rộng quần áo mới đúng:
+      áo là vỏ mỏng, nới ra chỉ rộng thêm chứ không tự giao nhau.</li>
+
       <li><b>Cởi quần áo ra thì bên dưới rỗng.</b> Quần áo là lưới riêng thật —
       trùng <span class="num">0%</span> đỉnh với thân, không dính lỗi lớp chồng
       lớp — nhưng Mixamo đã xoá sạch phần da bị che. Cởi ra thì nhân vật nam chỉ
@@ -240,13 +251,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
 const WHO = {
-  nam: '../build/boxer_nam/boxer_nam.glb',
-  nu:  '../build/boxer_nu/boxer_nu.glb',
+  nam:  '../build/boxer_nam/boxer_nam.glb',
+  nu:   '../build/boxer_nu/boxer_nu.glb',
+  mano: '../build/manocanh/manocanh.glb',
 };
 
 // Tủ đồ. Mỗi bộ liệt kê đúng những lưới cần hiện; mọi lưới quần áo khác bị ẩn.
 // Đầu, tóc và mi mắt thì luôn hiện.
-const ALWAYS = /_(Body|Hair|Eyelashes|Eyeleashes)$/;
+const ALWAYS = /(_(Body|Hair|Eyelashes|Eyeleashes)|^Ch36)$/;
 const WEAR = {
   nam: [
     { id: 'san', label: '⚽ Đồ bóng đá',
@@ -255,6 +267,16 @@ const WEAR = {
     { id: 'tap', label: '👟 Đồ tập (mượn)',
       show: ['Ch37_Shirt', 'Ch37_Zipper', 'Ch37_Pants', 'Ch38_Shoes'],
       note: 'Mượn từ nhân vật nữ. Hai mảng da đầu gối phải ẩn đi, nếu không chúng chọc xuyên qua quần dài.' },
+  ],
+  mano: [
+    { id: 'tran', label: '🧍 Không mặc gì', show: [],
+      note: 'Hình nộm có thân trọn vẹn từ bàn chân tới đầu, nên cởi hết vẫn không hở chỗ nào — khác hẳn hai võ sĩ.' },
+    { id: 'bongda', label: '⚽ Đồ bóng đá',
+      show: ['Ch38_Shirt', 'Ch38_Shorts', 'Ch38_Socks', 'Ch38_Shoes'],
+      note: 'Mượn của nhân vật nam.' },
+    { id: 'tap', label: '👟 Đồ tập',
+      show: ['Ch37_Shirt', 'Ch37_Zipper', 'Ch37_Pants', 'Ch37_Sneakers'],
+      note: 'Mượn của nhân vật nữ. Đồ được nới ra 12 mm cho vừa thân hình nộm.' },
   ],
   nu: [
     { id: 'tap', label: '👟 Đồ tập',

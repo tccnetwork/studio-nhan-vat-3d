@@ -59,15 +59,43 @@ CLIP_SOURCES = [
 
 # Tủ đồ mượn từ file khác. Áo may cho rig Mixamo nào cũng đeo được lên rig
 # Mixamo khác, vì cùng tên xương — chỉ phải đổi tiền tố nhóm đỉnh.
+PB1 = os.path.join(ROOT, 'source', 'Punching_Bag_1.fbx')
+PB2 = os.path.join(ROOT, 'source', 'Punching_Bag_2.fbx')
 WARDROBE = {
-    'boxer_nam': (os.path.join(ROOT, 'source', 'Punching_Bag_2.fbx'),
-                  ('Ch37_Shirt', 'Ch37_Zipper', 'Ch37_Pants')),
-    'boxer_nu': (os.path.join(ROOT, 'source', 'Punching_Bag_1.fbx'),
-                 ('Ch38_Shirt',)),
+    'boxer_nam': [(PB2, ('Ch37_Shirt', 'Ch37_Zipper', 'Ch37_Pants'))],
+    'boxer_nu': [(PB1, ('Ch38_Shirt',))],
+    # Hình nộm có thân trọn vẹn nên mặc được cả hai bộ mà không hở chỗ nào.
+    'manocanh': [(PB1, ('Ch38_Shirt', 'Ch38_Shorts', 'Ch38_Socks', 'Ch38_Shoes')),
+                 (PB2, ('Ch37_Shirt', 'Ch37_Zipper', 'Ch37_Pants', 'Ch37_Sneakers'))],
 }
 # Da hở được nặn vừa bộ đồ GỐC. Mặc bộ dài chồng lên thì mấy mảng ấy chọc
 # xuyên qua vải, nên phải tách ra thành lưới riêng để ẩn đi được.
 BARE_Z = 0.95            # đảo lưới nằm hẳn dưới mức này là da chân hở
+# Quần áo may vừa thân người này thì chật với thân người kia. Hình nộm to hơn
+# hai võ sĩ nên thân chọc ra ngoài áo mượn. Thu thân vào theo pháp tuyến là
+# phép sửa một lần dùng cho MỌI bộ đồ; đẩy từng bộ áo ra thì phải chỉnh lại
+# mỗi lần thêm đồ mới.
+# Nới rộng quần áo mượn, KHÔNG thu người. Thu người thì hỏng: chi thể chỉ dày
+# 5–7 cm nên bù vào từ hai phía là gần như sập, và thử ở 14 mm đã nát ngón tay,
+# ở 20 mm nát cả tay chân. Áo là vỏ mỏng, nới ra chỉ rộng thêm chứ không tự
+# giao nhau.
+INFLATE_MM = {'manocanh': 12.0}
+
+
+# Chừa những chỗ mảnh. Ngón tay và ngón chân chỉ dày cỡ chục milimét nên thu
+# đều tay là bóp nát chúng thành gai — thử rồi. Đầu thì luôn hở nên không cần
+# thu, mà thu là méo mặt.
+def inflate(obj, mm):
+    """Nới một lưới vỏ ra ngoài theo pháp tuyến đỉnh.
+
+    Toạ độ đỉnh nằm trong hệ riêng của đối tượng nên phải quy đổi từ milimét
+    của thế giới.
+    """
+    unit = (obj.matrix_world.to_3x3() @ Vector((1.0, 0.0, 0.0))).length
+    d = (mm / 1000.0) / unit
+    for v in obj.data.vertices:
+        v.co = v.co + v.normal * d
+    obj.data.update()
 
 
 def split_bare_skin(body, z_max=BARE_Z):
@@ -437,14 +465,26 @@ def build(src, tag, own_name='00_DamBao'):
 
     normalise_prefix(arm, meshes)
 
+    # Lưới thân: theo hậu tố _body, hoặc lưới nhiều đỉnh nhất nếu chỉ có một
+    # lưới duy nhất như hình nộm (tên nó là "Ch36", không có hậu tố nào).
     body = next((o for o in meshes if o.name.lower().endswith('_body')), None)
+    if body is None and len(meshes) == 1:
+        body = meshes[0]
     if body is not None:
         skin = split_bare_skin(body)
         if skin is not None:
             meshes.append(skin)
+    grew = []
+    for path, names in WARDROBE.get(tag, []):
+        grew += borrow_clothes(arm, path, names)
+    mm = INFLATE_MM.get(tag)
+    if mm:
+        for n in grew:
+            o = bpy.data.objects.get(n)
+            if o is not None:
+                inflate(o, mm)
+        print('    nới %d món đồ mượn ra %.0f mm' % (len(grew), mm))
     if tag in WARDROBE:
-        path, names = WARDROBE[tag]
-        borrow_clothes(arm, path, names)
         meshes = [o for o in bpy.data.objects if o.type == 'MESH']
         normalise_prefix(arm, meshes)
 
