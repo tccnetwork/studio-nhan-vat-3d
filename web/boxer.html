@@ -480,7 +480,9 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 
-pick('nam').catch(err => {
+// ?ai=af1 để mở thẳng một nhân vật — tiện gửi link và tiện chụp ảnh kiểm.
+const want0 = new URLSearchParams(location.search).get('ai');
+pick(WHO[want0] ? want0 : 'nam').catch(err => {
   const l = document.getElementById('loading');
   if (l) l.textContent = 'không tải được: ' + err;
 });

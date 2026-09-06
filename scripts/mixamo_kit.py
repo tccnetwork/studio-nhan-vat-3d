@@ -28,6 +28,7 @@ import bpy
 from mathutils import Vector
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, 'tools'))
 OUT_ROOT = os.path.join(ROOT, 'build')
 STD = 'mixamorig:'
 # Draco chỉ nén hình học, không đụng tới ảnh. Nhân vật Mixamo kèm bốn map
@@ -234,6 +235,33 @@ def normalise_prefix(arm, meshes):
     return n
 
 
+_ALPHA_CACHE = {}
+
+
+def alpha_varies(img, thresh=0.99):
+    """Kênh alpha của ảnh có thật sự dùng đến không.
+
+    Lấy mẫu thưa bằng numpy: ảnh 4096² là 67 triệu số thực, đọc hết thì mỗi
+    tấm mất hàng chục giây.
+    """
+    import numpy as np
+    key = img.name
+    if key in _ALPHA_CACHE:
+        return _ALPHA_CACHE[key]
+    w, h = img.size
+    if w == 0 or img.channels < 4:
+        _ALPHA_CACHE[key] = False
+        return False
+    buf = np.empty(len(img.pixels), dtype=np.float32)
+    img.pixels.foreach_get(buf)
+    a = buf.reshape(-1, 4)[::17, 3]
+    out = bool(a.min() < thresh)
+    _ALPHA_CACHE[key] = out
+    print('        alpha "%s": nhỏ nhất %.3f -> %s'
+          % (img.name[:22], float(a.min()), 'có dùng' if out else 'đục hoàn toàn'))
+    return out
+
+
 def fix_materials():
     """Sửa ba lỗi của bộ nhập FBX, cả ba đều làm nhân vật trông như nhựa.
 
@@ -247,7 +275,7 @@ def fix_materials():
     thấy ảnh nối vào một ô tên "Color", nhưng đó chính là đầu vào của node
     Normal Map.
     """
-    fixed = {'metallic': 0, 'gloss': 0, 'normal': 0}
+    fixed = {'metallic': 0, 'gloss': 0, 'normal': 0, 'blend': 0, 'spec': 0}
     for m in bpy.data.materials:
         if not m.use_nodes:
             continue
@@ -258,6 +286,41 @@ def fix_materials():
         if b.inputs['Metallic'].default_value != 0.0 and not b.inputs['Metallic'].links:
             b.inputs['Metallic'].default_value = 0.0
             fixed['metallic'] += 1
+
+        # Bộ nhập FBX nối kênh alpha của ảnh diffuse vào MỌI vật liệu, kể cả
+        # những chỗ ảnh đó đục hoàn toàn. Hệ quả: glTF xuất ra alphaMode BLEND
+        # kèm doubleSided, và trình duyệt sắp xếp độ sâu sai — tóc, áo và thân
+        # đè lẫn nhau tuỳ góc nhìn. Trong Blender gần như không thấy, nên phải
+        # đọc thẳng file glTF mới phát hiện.
+        #
+        # Phân biệt bằng SỐ chứ không đoán: đo kênh alpha của chính tấm ảnh.
+        # Chỉ TÓC mới thật sự cần alpha. Ảnh diffuse của Mixamo có kênh alpha
+        # dùng để giấu phần thân nằm dưới quần áo, nhưng áp nó lên vật liệu
+        # thân thì khuôn mặt bị băm nát — mắt rách, da thủng lỗ. Phần bị giấu
+        # ấy vốn nằm khuất dưới áo nên bỏ alpha đi không mất gì.
+        al = b.inputs['Alpha']
+        if al.links:
+            img = getattr(al.links[0].from_node, 'image', None)
+            if 'hair' in m.name.lower() and img is not None and alpha_varies(img):
+                # Tóc thật sự cần alpha. Dùng CLIP (glTF ghi alphaMode MASK)
+                # thay vì BLEND: mặt nạ không cần sắp xếp độ sâu nên không loạn.
+                m.blend_method = 'CLIP'
+                m.alpha_threshold = 0.5
+                fixed['blend'] += 1
+            else:
+                nt.links.remove(al.links[0])
+                al.default_value = 1.0
+                m.blend_method = 'OPAQUE'
+                m.use_backface_culling = True
+                fixed['blend'] += 1
+
+        # Blender xuất specular ra glTF với hệ số nhân 2, nên để mặc định 1,0 ở
+        # đây thành 2,0 trong file — ngoài dải hợp lý và làm mọi thứ bóng như
+        # nhựa. 0,5 mới là giá trị vật lý bình thường.
+        sp = b.inputs.get('Specular IOR Level')
+        if sp is not None and not sp.links and sp.default_value > 0.5:
+            sp.default_value = 0.5
+            fixed['spec'] += 1
 
         r = b.inputs['Roughness']
         if r.links:
@@ -281,8 +344,10 @@ def fix_materials():
             if not to_color and n.image.colorspace_settings.name != 'Non-Color':
                 n.image.colorspace_settings.name = 'Non-Color'
                 fixed['normal'] += 1
-    print('    vật liệu: %d bỏ metallic, %d đảo glossiness, %d đưa về Non-Color'
-          % (fixed['metallic'], fixed['gloss'], fixed['normal']))
+    print('    vật liệu: %d bỏ metallic, %d đảo glossiness, %d Non-Color, '
+          '%d về đục, %d hạ specular'
+          % (fixed['metallic'], fixed['gloss'], fixed['normal'],
+             fixed['blend'], fixed['spec']))
 
 
 def shrink_textures():
@@ -450,6 +515,34 @@ def push_nla(arm, names):
         tr.strips.new(n, 1, act)
 
 
+ALPHA_CUTOFF = 0.5
+
+
+def patch_alpha_mode(path):
+    """Đổi alphaMode BLEND thành MASK ngay trong file glTF đã xuất.
+
+    Bộ xuất của Blender 4.5 không còn đọc material.blend_method — đặt nó thành
+    CLIP trong Blender vẫn ra BLEND trong file. Thay vì đoán tiếp xem nó đọc
+    thuộc tính nào, vá thẳng vào JSON: chắc chắn và kiểm được bằng cách đọc lại.
+
+    BLEND buộc trình duyệt sắp xếp độ sâu giữa các lưới, và sắp sai thì tóc, áo
+    và thân đè lẫn nhau tuỳ góc nhìn. MASK chỉ cắt theo ngưỡng nên không cần
+    sắp xếp gì — đúng thứ cần cho tóc và cho phần thân bị alpha giấu đi.
+    """
+    import glb as glblib
+    js, blob = glblib.read(path)
+    n = 0
+    for m in js.get('materials', []):
+        if m.get('alphaMode') == 'BLEND':
+            m['alphaMode'] = 'MASK'
+            m['alphaCutoff'] = ALPHA_CUTOFF
+            n += 1
+    if n:
+        glblib.write(path, js, blob)
+    print('    vá %d vật liệu BLEND -> MASK trong %s'
+          % (n, os.path.basename(path)))
+
+
 def build(src, tag, own_name='00_DamBao'):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.context.scene.render.fps = 30
@@ -522,6 +615,7 @@ def build(src, tag, own_name='00_DamBao'):
         export_draco_position_quantization=14,
         export_draco_normal_quantization=10,
         export_draco_texcoord_quantization=12)
+    patch_alpha_mode(out)
     print('>>> Xong %s: %.2f MB, %d clip'
           % (os.path.basename(out), os.path.getsize(out) / 1048576, len(keep)))
     return out
