@@ -136,6 +136,12 @@ dl.facts dd {
     </div>
 
     <div class="card">
+      <h2>Trang phục</h2>
+      <div class="btns" id="wear"></div>
+      <p style="margin:9px 0 0;font-size:11.5px;color:var(--muted)" id="wear-note"></p>
+    </div>
+
+    <div class="card">
       <h2>Động tác</h2>
       <h3>của chính họ</h3>
       <div class="btns" id="g0"></div>
@@ -158,9 +164,10 @@ dl.facts dd {
         <dt>đỉnh</dt><dd>27 963</dd>
         <dt>lưới</dt><dd>7</dd>
         <dt>clip</dt><dd>1 → <b>17</b></dd>
+        <dt>bộ trang phục</dt><dd>2</dd>
         <dt>texture</dt><dd>4096² → 1024²</dd>
         <dt>FBX gốc</dt><dd>49,9 MB</dd>
-        <dt>GLB nén Draco</dt><dd>7,82 MB</dd>
+        <dt>GLB nén Draco</dt><dd>10,99 MB</dd>
       </dl>
     </div>
   </div>
@@ -192,6 +199,23 @@ dl.facts dd {
       lửng vì thấy ảnh nối vào một ô tên “Color”, nhưng đó chính là đầu vào của node
       Normal Map.</li>
 
+      <li><b>Cởi quần áo ra thì bên dưới rỗng.</b> Quần áo là lưới riêng thật —
+      trùng <span class="num">0%</span> đỉnh với thân, không dính lỗi lớp chồng
+      lớp — nhưng Mixamo đã xoá sạch phần da bị che. Cởi ra thì nhân vật nam chỉ
+      còn đầu, hai bàn tay và một mẩu ống chân; nhân vật nữ thì lưới thân chỉ trải
+      <span class="num">z 1,34–1,63</span> m, tức <b>chỉ có mỗi cái đầu</b>. Nên
+      “thay đồ” ở đây là đắp bộ khác đè lên, không phải cởi ra rồi mặc vào.</li>
+
+      <li><b>Đắp đồ giữa hai nhân vật thì được.</b> Cùng tên xương Mixamo nên áo
+      may cho người này đeo được lên bộ xương người kia; chỉ phải đổi tiền tố nhóm
+      đỉnh. Lần đầu tôi đắp hỏng, quần áo phình khổng lồ — vì đổi cha mà không giữ
+      lại ma trận thế giới của lưới áo, nên nó mang theo tỉ lệ của bộ xương cũ.
+      Và hai mảng da đầu gối của nhân vật nam — vốn là phần hở giữa quần đùi và
+      tất — chọc xuyên qua quần dài, nên phải tách chúng thành lưới riêng
+      (<code>Ch38_BareLegs</code>) để ẩn được. Tách theo <b>đảo liên thông</b> chứ
+      không cắt theo cao độ: cắt theo cao độ sẽ xẻ đôi một mảng da và để lại mép
+      hở.</li>
+
       <li><b>Chân lún xuống sàn.</b> Clip mượn tính theo chiều cao hông của người
       khác, chênh <span class="num">3–14%</span>. Lần đầu tôi căn theo xương bàn
       chân thì vẫn lún <span class="num">1,6–5</span> cm — vì đế giày nằm thấp hơn
@@ -218,6 +242,28 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 const WHO = {
   nam: '../build/boxer_nam/boxer_nam.glb',
   nu:  '../build/boxer_nu/boxer_nu.glb',
+};
+
+// Tủ đồ. Mỗi bộ liệt kê đúng những lưới cần hiện; mọi lưới quần áo khác bị ẩn.
+// Đầu, tóc và mi mắt thì luôn hiện.
+const ALWAYS = /_(Body|Hair|Eyelashes|Eyeleashes)$/;
+const WEAR = {
+  nam: [
+    { id: 'san', label: '⚽ Đồ bóng đá',
+      show: ['Ch38_Shirt', 'Ch38_Shorts', 'Ch38_Socks', 'Ch38_Shoes', 'Ch38_BareLegs'],
+      note: 'Bộ gốc của nhân vật. Hai mảng da đầu gối là phần hở giữa quần đùi và tất.' },
+    { id: 'tap', label: '👟 Đồ tập (mượn)',
+      show: ['Ch37_Shirt', 'Ch37_Zipper', 'Ch37_Pants', 'Ch38_Shoes'],
+      note: 'Mượn từ nhân vật nữ. Hai mảng da đầu gối phải ẩn đi, nếu không chúng chọc xuyên qua quần dài.' },
+  ],
+  nu: [
+    { id: 'tap', label: '👟 Đồ tập',
+      show: ['Ch37_Shirt', 'Ch37_Zipper', 'Ch37_Pants', 'Ch37_Sneakers'],
+      note: 'Bộ gốc của nhân vật.' },
+    { id: 'ao', label: '⚽ Áo bóng đá (mượn)',
+      show: ['Ch38_Shirt', 'Ch37_Pants', 'Ch37_Sneakers'],
+      note: 'Chỉ mượn được áo. Quần đùi thì không, vì chân của nhân vật này không được nặn — cởi quần dài ra là hở một khoảng trống.' },
+  ],
 };
 // Nhóm nút theo nguồn gốc động tác, và tên tiếng Việt cho dễ đọc.
 const GROUPS = [
@@ -301,6 +347,7 @@ async function pick(who) {
   cur.root.visible = true;
   action = null;
   frame();
+  buildWear(who);
   buildButtons();
   play(cur.clips.has(wanted) ? wanted : [...cur.clips.keys()].sort()[0]);
   const l = document.getElementById('loading');
@@ -314,6 +361,34 @@ function frame() {
   controls.target.set(0, mid.y, 0);
   camera.position.set(0, mid.y + size.y * 0.04, size.y * 1.9);
   controls.update();
+}
+
+function buildWear(who) {
+  const bar = document.getElementById('wear');
+  bar.textContent = '';
+  const sets = WEAR[who] || [];
+  sets.forEach((set, i) => {
+    const b = document.createElement('button');
+    b.textContent = set.label;
+    b.addEventListener('click', () => dress(who, set.id));
+    bar.appendChild(b);
+  });
+  if (sets.length) dress(who, sets[0].id);
+}
+
+function dress(who, id) {
+  const sets = WEAR[who] || [];
+  const set = sets.find(s => s.id === id) || sets[0];
+  if (!set) return;
+  const keep = new Set(set.show);
+  cur.root.traverse(o => {
+    if (!o.isMesh && !o.isSkinnedMesh) return;
+    const n = o.name;
+    o.visible = ALWAYS.test(n) || keep.has(n);
+  });
+  document.getElementById('wear-note').textContent = set.note;
+  [...document.getElementById('wear').children]
+    .forEach((b, i) => b.classList.toggle('on', sets[i].id === set.id));
 }
 
 function buildButtons() {

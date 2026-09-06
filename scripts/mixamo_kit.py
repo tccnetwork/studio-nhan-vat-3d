@@ -57,6 +57,123 @@ CLIP_SOURCES = [
 ]
 
 
+# Tủ đồ mượn từ file khác. Áo may cho rig Mixamo nào cũng đeo được lên rig
+# Mixamo khác, vì cùng tên xương — chỉ phải đổi tiền tố nhóm đỉnh.
+WARDROBE = {
+    'boxer_nam': (os.path.join(ROOT, 'source', 'Punching_Bag_2.fbx'),
+                  ('Ch37_Shirt', 'Ch37_Zipper', 'Ch37_Pants')),
+    'boxer_nu': (os.path.join(ROOT, 'source', 'Punching_Bag_1.fbx'),
+                 ('Ch38_Shirt',)),
+}
+# Da hở được nặn vừa bộ đồ GỐC. Mặc bộ dài chồng lên thì mấy mảng ấy chọc
+# xuyên qua vải, nên phải tách ra thành lưới riêng để ẩn đi được.
+BARE_Z = 0.95            # đảo lưới nằm hẳn dưới mức này là da chân hở
+
+
+def split_bare_skin(body, z_max=BARE_Z):
+    """Tách các đảo lưới nằm thấp của lưới thân ra thành một đối tượng riêng.
+
+    Tách theo ĐẢO LIÊN THÔNG chứ không cắt theo cao độ: cắt theo cao độ sẽ xẻ
+    đôi một mảng da, để lại mép hở.
+    """
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(body.data)
+    bm.verts.ensure_lookup_table()
+    seen = set()
+    islands = []
+    for v in bm.verts:
+        if v.index in seen:
+            continue
+        stack, comp = [v], []
+        while stack:
+            x = stack.pop()
+            if x.index in seen:
+                continue
+            seen.add(x.index)
+            comp.append(x)
+            for e in x.link_edges:
+                o = e.other_vert(x)
+                if o.index not in seen:
+                    stack.append(o)
+        islands.append(comp)
+    mw = body.matrix_world
+    low = []
+    for comp in islands:
+        top = max((mw @ v.co).z for v in comp)
+        if top < z_max:
+            low += [v.index for v in comp]
+    bm.free()
+    if not low:
+        print('    không có mảng da hở nào cần tách')
+        return None
+
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = body
+    body.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    for i in low:
+        body.data.vertices[i].select = True
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.separate(type='SELECTED')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    made = [o for o in bpy.context.selected_objects if o is not body]
+    if not made:
+        return None
+    skin = made[0]
+    skin.name = body.name.split('_')[0] + '_BareLegs'
+    print('    tách %d đỉnh da hở thành "%s"' % (len(low), skin.name))
+    return skin
+
+
+def borrow_clothes(host, path, names):
+    """Đắp quần áo từ một file Mixamo khác sang bộ xương đang dựng.
+
+    Phải GIỮ NGUYÊN ma trận thế giới của lưới áo sau khi đổi cha. Bỏ bước đó
+    thì áo phình khổng lồ — hai file có tỉ lệ đối tượng khác nhau và phép đổi
+    cha mang theo tỉ lệ cũ.
+    """
+    host_pre = find_prefix(host)
+    before = set(bpy.data.objects)
+    before_act = set(bpy.data.actions)
+    if path.lower().endswith('.fbx'):
+        bpy.ops.import_scene.fbx(filepath=path)
+    else:
+        bpy.ops.import_scene.gltf(filepath=path)
+    new = set(bpy.data.objects) - before
+    guest = next((o for o in new if o.type == 'ARMATURE'), None)
+    guest_pre = find_prefix(guest) if guest else ''
+    got = []
+    for o in list(new):
+        if o.type != 'MESH' or o.name not in names:
+            if o is not guest:
+                bpy.data.objects.remove(o, do_unlink=True)
+            continue
+        for g in o.vertex_groups:
+            if guest_pre and g.name.startswith(guest_pre):
+                g.name = host_pre + g.name[len(guest_pre):]
+        mw = o.matrix_world.copy()
+        o.parent = host
+        o.matrix_parent_inverse = host.matrix_world.inverted()
+        o.matrix_world = mw
+        for m in list(o.modifiers):
+            o.modifiers.remove(m)
+        o.modifiers.new('Armature', 'ARMATURE').object = host
+        got.append(o.name)
+    if guest:
+        bpy.data.objects.remove(guest, do_unlink=True)
+    # Xoá dứt điểm action của khách. Lọc theo users == 0 là không đủ: bộ nhập
+    # FBX bật fake user nên action vẫn còn một người dùng giả, và nó lọt vào
+    # danh sách "hoạt ảnh sẵn có" của chủ nhà.
+    for act in list(set(bpy.data.actions) - before_act):
+        act.use_fake_user = False
+        bpy.data.actions.remove(act)
+    print('    mượn %d món: %s' % (len(got), ', '.join(got)))
+    return got
+
+
 def find_prefix(arm):
     """Mixamo đánh số tiền tố khi xuất nhiều lần: mixamorig5:, mixamorig6:...
     nên không thể ghi cứng 'mixamorig:'."""
@@ -319,6 +436,18 @@ def build(src, tag, own_name='00_DamBao'):
     print('    %d xương, %d lưới, %d đỉnh' % (len(arm.data.bones), len(meshes), verts))
 
     normalise_prefix(arm, meshes)
+
+    body = next((o for o in meshes if o.name.lower().endswith('_body')), None)
+    if body is not None:
+        skin = split_bare_skin(body)
+        if skin is not None:
+            meshes.append(skin)
+    if tag in WARDROBE:
+        path, names = WARDROBE[tag]
+        borrow_clothes(arm, path, names)
+        meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+        normalise_prefix(arm, meshes)
+
     fix_materials()
     shrink_textures()
 
