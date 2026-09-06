@@ -4,7 +4,7 @@ Quy trình dựng nhân vật 3D cho web, chạy hoàn toàn bằng Blender head
 three.js. Không có bước nào phải mở giao diện Blender: mọi thứ là script, dựng
 lại lúc nào cũng ra đúng kết quả cũ.
 
-Trong repo có **bốn nhân vật**, mỗi nhân vật một trình xem riêng:
+Trong repo có **bảy nhân vật**, mỗi nhân vật một trình xem riêng:
 
 | nhân vật | nguồn | dựng bằng | trang xem |
 |---|---|---|---|
@@ -12,6 +12,8 @@ Trong repo có **bốn nhân vật**, mỗi nhân vật một trình xem riêng:
 | Cung thủ Erika | `char6.fbx`, rig Mixamo 87 xương | `scripts/build_char6.py` | `web/char6.html` |
 | Hiệp sĩ thập tự | ba file `char4*.fbx`, rig Mixamo 86 xương | `scripts/build_char4.py` | `web/char4.html` |
 | Nhân vật nam | nắn từ chính rig của cô ca sĩ | `scripts/build_idol_male.py` | `web/idol_male.html` |
+| Seed-san | avatar mẫu chính thức của chuẩn VRM | `scripts/build_seed.py` | `web/seed.html` |
+| Hai võ sĩ | `Punching_Bag_1/2.fbx`, rig Mixamo | `scripts/mixamo_kit.py` | `web/boxer.html` |
 
 Cộng thêm một trang thứ tư, `web/idol_mimic.html`, cho cô ca sĩ diễn lại **11
 động tác của cả hai nhân vật Mixamo** — kèm theo cả đồ nghề: cung, ống tên,
@@ -205,6 +207,31 @@ riêng lưới trong miệng — lưới da có lỗ ở chỗ ấy, thu mỗi p
 nhìn thấu vào trong đầu. Thứ hai, khẩu hình glTF lưu TOẠ ĐỘ TUYỆT ĐỐI của toàn
 bộ đỉnh, nên mọi phép nắn phải áp cho cả 58 khẩu hình; bỏ qua là hễ chớp mắt,
 khuôn mặt lại bật về hình nữ cũ.
+
+### Đưa một nhân vật Mixamo bất kỳ vào — `scripts/mixamo_kit.py`
+
+Công cụ dùng chung, không phải script riêng cho từng nhân vật:
+
+```bash
+$BL --background --factory-startup --python scripts/mixamo_kit.py -- \
+    source/<file>.fbx <tên thư mục ra>
+```
+
+Đưa file vào, nhận lại một GLB đã sửa vật liệu và đã có sẵn toàn bộ kho động
+tác của dự án. Nhân vật `Punching_Bag_1` vào với một hoạt ảnh, ra với 17.
+
+Chép thẳng góc xoay được chứ không cần phép chuyển: đo tư thế nghỉ của sáu rig
+Mixamo trong dự án, lệch hướng trung bình chỉ 4,9–5,2°. Nhưng phải ĐO trước —
+`Soldier.glb` cũng là rig Mixamo mà lệch trung bình 64,6° và cực đại 177°, có
+xương lật ngược; lấy bừa là nhân vật vặn xoắn.
+
+Ba cái bẫy khác đã xử lý sẵn trong công cụ: tiền tố xương Mixamo có đánh số
+(`mixamorig5:`) nên phải dò chứ không ghi cứng, và phải đổi cả nhóm đỉnh —
+bỏ sót là lưới rời khỏi xương; bộ nhập FBX đặt `Metallic = 0,5` cho da và nối
+map glossiness thẳng vào `Roughness` trong khi glossiness là nghịch đảo của
+roughness; và clip mượn phải hạ xuống cho chân chạm sàn, đo bằng đỉnh của lưới
+giày chứ không phải xương bàn chân — căn theo xương thì vẫn lún 1,6–5 cm vì đế
+giày nằm thấp hơn xương.
 
 ### Chuyển động tác giữa hai rig — `scripts/build_idol_mimic.py`
 
