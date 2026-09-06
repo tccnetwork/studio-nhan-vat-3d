@@ -470,7 +470,9 @@ def build(src, tag, own_name='00_DamBao'):
     body = next((o for o in meshes if o.name.lower().endswith('_body')), None)
     if body is None and len(meshes) == 1:
         body = meshes[0]
-    if body is not None:
+    # Chỉ tách da hở khi nhân vật SẼ mặc đồ mượn. Không mượn gì thì phép tách
+    # chỉ băm nhỏ lưới vô ích.
+    if body is not None and tag in WARDROBE:
         skin = split_bare_skin(body)
         if skin is not None:
             meshes.append(skin)

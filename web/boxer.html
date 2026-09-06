@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Hai Võ Sĩ Và Một Hình Nộm</title>
+<title>Năm Nhân Vật Mixamo</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root {
@@ -112,11 +112,11 @@ dl.facts dd {
 <body>
 <div class="wrap">
   <header>
-    <h1>Hai Võ Sĩ <em>và một hình nộm</em></h1>
-    <p class="sub">Hai nhân vật Mixamo đưa vào chỉ mang theo <b>một</b> hoạt ảnh, giờ
-    có <span class="num">17</span>: một của chính họ, sáu của hiệp sĩ, năm của cung thủ,
-    năm từ thư viện Mixamo. Không phải chuyển động tác — bốn rig này cùng chuẩn nên
-    chép thẳng góc xoay được.</p>
+    <h1>Năm Nhân Vật Mixamo <em>— cùng một kho động tác</em></h1>
+    <p class="sub">Mỗi nhân vật đưa vào chỉ mang theo <b>một</b> hoạt ảnh, giờ đều có
+    <span class="num">17</span>: một của chính họ, sáu của hiệp sĩ, năm của cung thủ,
+    năm từ thư viện Mixamo. Không phải chuyển động tác — các rig này cùng chuẩn nên
+    chép thẳng góc xoay được. Thêm một nhân vật mới chỉ là một dòng lệnh.</p>
   </header>
 
   <div id="stage">
@@ -133,6 +133,8 @@ dl.facts dd {
         <button id="who-nam" class="on">Nam</button>
         <button id="who-nu">Nữ</button>
         <button id="who-mano">Hình nộm</button>
+        <button id="who-af1">AF1 · hoody</button>
+        <button id="who-af2">AF2 · áo xanh</button>
       </div>
     </div>
 
@@ -161,14 +163,14 @@ dl.facts dd {
     <div class="card">
       <h2>Số liệu</h2>
       <dl class="facts">
-        <dt>xương</dt><dd>65</dd>
-        <dt>đỉnh</dt><dd>27 963</dd>
-        <dt>lưới</dt><dd>7</dd>
+        <dt>nhân vật</dt><dd>5</dd>
+        <dt>xương mỗi người</dt><dd>65</dd>
+        <dt>đỉnh</dt><dd>14k – 35k</dd>
         <dt>clip</dt><dd>1 → <b>17</b></dd>
-        <dt>bộ trang phục</dt><dd>2</dd>
+        <dt>bộ trang phục</dt><dd>2–3</dd>
         <dt>texture</dt><dd>4096² → 1024²</dd>
-        <dt>FBX gốc</dt><dd>49,9 MB</dd>
-        <dt>GLB nén Draco</dt><dd>10,99 MB</dd>
+        <dt>FBX gốc</dt><dd>34 – 50 MB</dd>
+        <dt>GLB nén Draco</dt><dd>5,2 – 11,0 MB</dd>
       </dl>
     </div>
   </div>
@@ -254,6 +256,8 @@ const WHO = {
   nam:  '../build/boxer_nam/boxer_nam.glb',
   nu:   '../build/boxer_nu/boxer_nu.glb',
   mano: '../build/manocanh/manocanh.glb',
+  af1:  '../build/af1/af1.glb',
+  af2:  '../build/af2/af2.glb',
 };
 
 // Tủ đồ. Mỗi bộ liệt kê đúng những lưới cần hiện; mọi lưới quần áo khác bị ẩn.
@@ -389,6 +393,9 @@ function buildWear(who) {
   const bar = document.getElementById('wear');
   bar.textContent = '';
   const sets = WEAR[who] || [];
+  // Nhân vật nào không mượn đồ của ai thì giấu hẳn thẻ trang phục, thay vì
+  // để một thẻ trống.
+  bar.closest('.card').hidden = sets.length === 0;
   sets.forEach((set, i) => {
     const b = document.createElement('button');
     b.textContent = set.label;
